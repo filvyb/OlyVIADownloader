@@ -1,5 +1,5 @@
 import argparse
-import os, options
+import os, options, asyncdispatch
 import downloader
 
 when isMainModule:
@@ -59,4 +59,4 @@ when isMainModule:
   if addresssplit.len != 2:
     raise newException(ValueError, "Address must be in the format address:port")
   
-  downloader(addresssplit[0], addresssplit[1].parseInt, username, password, database, directory, file)
+  waitFor downloader(addresssplit[0], addresssplit[1].parseInt, username, password, database, directory, file)
