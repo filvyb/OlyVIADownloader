@@ -31,6 +31,35 @@ proc testConnection(client: NrtpTcpClient): Future[bool] {.async.} =
   echo "Connection test failed"
   return false
 
+proc createSession(client: NrtpTcpClient): Future[int32] {.async.} =
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "Create" method call to create a session on the server
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  let requestData = createMethodCallRequest(
+    methodName = "Create",
+    typeName = typeName
+  )
+  
+  echo "Creating session..."
+  let responseData = await client.invoke("Create", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let sessionId = ret.returnValue.value.int32Val
+      echo "Session created with ID: ", sessionId
+      return sessionId
+  
+  echo "Failed to create session"
+  raise newException(IOError, "Failed to create session")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -46,7 +75,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     createDir(directory)
   
   # Create client and connect to server
-  let serverUri = "tcp://" & address & ":" & $port & "/"
+  let serverUri = "tcp://" & address & ":" & $port & "/" & "LLRemoteServerAccess"
   let client = newNrtpTcpClient(serverUri)
   
   try:
@@ -58,6 +87,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if not testResult:
       echo "Failed to verify connection with server"
       return
+    
+    let sessionId = await createSession(client)
+    echo "Using session ID: ", sessionId
     
     # TODO: Implement authentication
     
