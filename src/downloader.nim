@@ -113,6 +113,61 @@ proc getInterfaceVersion(client: NrtpTcpClient, interfaceId: uint32): Future[tup
   
   raise newException(IOError, "Failed to get interface version")
 
+proc dissolveAlias(client: NrtpTcpClient, alias: string): Future[tuple[status: int32, dbName: string, dbLocation: string, dbmsType: int32]] {.async.} =
+  ## Resolves a database alias to its actual database connection information
+  ## Returns a tuple with the status code, database name, database location, and DBMS type
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create method call with the required parameters
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: alias and placeholders for ref parameters
+  let args = @[
+    stringValue(alias),    # Input alias parameter
+    PrimitiveValue(kind: ptNull),       # Placeholder for ref database name
+    PrimitiveValue(kind: ptNull),       # Placeholder for ref database location
+    int32Value(0)          # Placeholder for ref DBMS type
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "DissolveAlias",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Resolving alias: ", alias
+  let responseData = await client.invoke("DissolveAlias", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum:
+      let statusCode = ret.returnValue.value.int32Val
+      
+      # Check if we have arguments in the response
+      if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 3:
+        # Extract the reference parameters
+        # Note: The first parameter is the unchanged input alias
+        let dbName = ret.args[1].value.stringVal.value      # First output is database name
+        let dbLocation = ret.args[2].value.stringVal.value  # Second output is database location
+        let dbmsType = ret.args[3].value.int32Val           # Third output is DBMS type
+        
+        echo "Alias resolved: database=", dbName, ", location=", dbLocation, ", type=", dbmsType
+        return (statusCode, dbName, dbLocation, dbmsType)
+      
+      # If we don't have enough arguments, just return the status code
+      return (statusCode, "", "", int32(0))
+  
+  raise newException(IOError, "Failed to resolve alias")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -147,6 +202,17 @@ proc downloader*(address: string, port: int, username, password, database, direc
     # Get interface version
     let apiversion = await getInterfaceVersion(client, 2)  # 2 is the ILLRemoteServer interface ID
     echo "Server API version: ", apiversion.major, ".", apiversion.minor, ".", apiversion.micro
+    
+    # Resolve database alias
+    let aliasInfo = await dissolveAlias(client, database)
+    if aliasInfo.status != 0:
+      echo "Failed to resolve database alias: ", database, " (status code: ", aliasInfo.status, ")"
+      return
+    
+    echo "Database details:"
+    echo "  Name: ", aliasInfo.dbName
+    echo "  Location: ", aliasInfo.dbLocation
+    echo "  DBMS Type: ", aliasInfo.dbmsType
     
     # TODO: Implement authentication
     
