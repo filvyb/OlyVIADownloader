@@ -168,6 +168,48 @@ proc dissolveAlias(client: NrtpTcpClient, alias: string): Future[tuple[status: i
   
   raise newException(IOError, "Failed to resolve alias")
 
+proc createConnectionObject(client: NrtpTcpClient, sessionId: int32): Future[int32] {.async.} =
+  ## Creates a connection object using the provided session ID
+  ## Returns the connection object ID that can be used for database operations
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "CreateConnectionObject" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create argument: sessionId
+  let args = @[
+    int32Value(sessionId)  # Session ID (int32)
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "CreateConnectionObject",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Creating connection object for session ID: ", sessionId
+  let responseData = await client.invoke("CreateConnectionObject", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let connectionId = ret.returnValue.value.int32Val
+      echo "Connection object created with ID: ", connectionId
+      return connectionId
+  
+  echo "Failed to create connection object"
+  raise newException(IOError, "Failed to create connection object")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -213,6 +255,10 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo "  Name: ", aliasInfo.dbName
     echo "  Location: ", aliasInfo.dbLocation
     echo "  DBMS Type: ", aliasInfo.dbmsType
+
+    # Create connection object
+    let connectionId = await createConnectionObject(client, sessionId)
+    echo "Using connection ID: ", connectionId
     
     # TODO: Implement authentication
     
