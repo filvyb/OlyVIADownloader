@@ -60,6 +60,59 @@ proc createSession(client: NrtpTcpClient): Future[int32] {.async.} =
   echo "Failed to create session"
   raise newException(IOError, "Failed to create session")
 
+proc getInterfaceVersion(client: NrtpTcpClient, interfaceId: uint32): Future[tuple[major, minor, micro: int32]] {.async.} =
+  ## Retrieves the interface version from the server
+  ## InterfaceId 2 represents the ILLRemoteServer interface
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create method call with the required parameters
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: interfaceId and placeholders for ref parameters
+  let args = @[
+    uint32Value(interfaceId),  # Interface ID (uint32)
+    int32Value(-1),  # Placeholder for ref Major parameter
+    int32Value(-1),  # Placeholder for ref Minor parameter
+    int32Value(-1)   # Placeholder for ref Micro parameter
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "GetInterfaceVersion",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Getting interface version..."
+  let responseData = await client.invoke("GetInterfaceVersion", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum:
+      let returnCode = ret.returnValue.value.int32Val
+      if returnCode != 0:
+        raise newException(IOError, "GetInterfaceVersion failed with code: " & $returnCode)
+    
+    # Check if we have arguments in the response
+    if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 3:
+      # Extract version components from output arguments
+      let major = ret.args[1].value.int32Val
+      let minor = ret.args[2].value.int32Val 
+      let micro = ret.args[3].value.int32Val
+      
+      echo "Interface version: ", major, ".", minor, ".", micro
+      return (major, minor, micro)
+  
+  raise newException(IOError, "Failed to get interface version")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -90,6 +143,10 @@ proc downloader*(address: string, port: int, username, password, database, direc
     
     let sessionId = await createSession(client)
     echo "Using session ID: ", sessionId
+    
+    # Get interface version
+    let apiversion = await getInterfaceVersion(client, 2)  # 2 is the ILLRemoteServer interface ID
+    echo "Server API version: ", apiversion.major, ".", apiversion.minor, ".", apiversion.micro
     
     # TODO: Implement authentication
     
