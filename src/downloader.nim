@@ -7,6 +7,7 @@ import DotNimRemoting/msnrbf/[helpers, grammar, enums, types]
 import DotNimRemoting/msnrbf/records/[methodinv, member]
 
 proc testConnection(client: NrtpTcpClient): Future[bool] {.async.} =
+  ## Tests the connection to the server by invoking the "Test" method
   # Create a "Test" method call to verify connectivity
   let typeName = "dbapi.dni.ILLRemoteServerAccess, LLDbRemoting"
   let requestData = createMethodCallRequest(
@@ -32,6 +33,8 @@ proc testConnection(client: NrtpTcpClient): Future[bool] {.async.} =
   return false
 
 proc createSession(client: NrtpTcpClient): Future[int32] {.async.} =
+  ## Creates a new session on the server
+
   # Set the path to the server object
   client.setPath("LLRemoteServer")
 
@@ -214,6 +217,8 @@ proc createConnectionObject(client: NrtpTcpClient, sessionId: int32): Future[int
 proc connectToDatabase(client: NrtpTcpClient, sessionId: int32, connectionId: int32, 
                       dbName: string, dbLocation: string, dbmsType: int32,
                       username: string, password: string, domain: string = ""): Future[int32] {.async.} =
+  ## Connects to the database using the provided connection details
+  ## Returns the status code (0 for success)
   # Set the path to the server object
   client.setPath("LLRemoteServer")
 
@@ -262,6 +267,104 @@ proc connectToDatabase(client: NrtpTcpClient, sessionId: int32, connectionId: in
   echo "Failed to connect to database, unexpected response"
   raise newException(IOError, "Failed to connect to database")
 
+proc disconnect(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Gracefully disconnects from the server
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter in the interface)
+  ##   connectionId - The connection ID (Connection parameter in the interface)
+  ## Returns the status code (0 for success)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "Disconnect" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client/Session ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "Disconnect",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Disconnecting session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("Disconnect", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 0:
+        echo "Successfully disconnected from database"
+      else:
+        echo "Failed to disconnect from database, error code: ", statusCode
+      return statusCode
+  
+  echo "Failed to disconnect from database, unexpected response"
+  raise newException(IOError, "Failed to disconnect from database")
+
+proc destroyConnectionObject(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Destroys a connection object on the server
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter in the interface)
+  ##   connectionId - The connection ID (Connection parameter in the interface)
+  ## Returns the status code (0 for success)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "DestroyConnectionObject" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client/Session ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "DestroyConnectionObject",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Destroying connection object - session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("DestroyConnectionObject", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 0:
+        echo "Successfully destroyed connection object"
+      else:
+        echo "Failed to destroy connection object, error code: ", statusCode
+      return statusCode
+  
+  echo "Failed to destroy connection object, unexpected response"
+  raise newException(IOError, "Failed to destroy connection object")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -279,6 +382,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
   # Create client and connect to server
   let serverUri = "tcp://" & address & ":" & $port & "/" & "LLRemoteServerAccess"
   let client = newNrtpTcpClient(serverUri)
+
+  var sessionId: int32 = 0
+  var connectionId: int32 = 0
   
   try:
     await client.connect()
@@ -290,7 +396,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to verify connection with server"
       return
     
-    let sessionId = await createSession(client)
+    sessionId = await createSession(client)
     echo "Using session ID: ", sessionId
     
     # Get interface version
@@ -309,7 +415,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo "  DBMS Type: ", aliasInfo.dbmsType
 
     # Create connection object
-    let connectionId = await createConnectionObject(client, sessionId)
+    connectionId = await createConnectionObject(client, sessionId)
     echo "Using connection ID: ", connectionId
 
     # Connect to database
@@ -322,11 +428,23 @@ proc downloader*(address: string, port: int, username, password, database, direc
     # TODO: Implement file listing
     
     # TODO: Implement file download
-
-    # TODO: Implement graceful disconnect
     
   except Exception as e:
     echo "Error: ", e.msg
   finally:
+    # Gracefully disconnect if we have valid session and connection IDs
+    if sessionId != 0 and connectionId != 0:
+      try:
+        let disconnectStatus = await disconnect(client, sessionId, connectionId)
+        if disconnectStatus != 0:
+          echo "Warning: Disconnect returned non-zero status: ", disconnectStatus
+          
+        # Destroy the connection object after disconnecting
+        let destroyStatus = await destroyConnectionObject(client, sessionId, connectionId)
+        if destroyStatus != 0:
+          echo "Warning: DestroyConnectionObject returned non-zero status: ", destroyStatus
+      except Exception as e:
+        echo "Error during cleanup: ", e.msg
+    
     await client.close()
     echo "Connection closed"
