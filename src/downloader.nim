@@ -210,6 +210,58 @@ proc createConnectionObject(client: NrtpTcpClient, sessionId: int32): Future[int
   echo "Failed to create connection object"
   raise newException(IOError, "Failed to create connection object")
 
+
+proc connectToDatabase(client: NrtpTcpClient, sessionId: int32, connectionId: int32, 
+                      dbName: string, dbLocation: string, dbmsType: int32,
+                      username: string, password: string, domain: string = ""): Future[int32] {.async.} =
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "ConnectEx" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments according to the ConnectEx method signature
+  var args: seq[PrimitiveValue] = @[
+    int32Value(sessionId),        # Client/Session ID
+    int32Value(connectionId),     # Connection ID
+    if dbName == "": PrimitiveValue(kind: ptNull) else: stringValue(dbName),  # DatabaseName (NULL if empty)
+    stringValue(dbLocation),      # DatabaseLocation
+    int32Value(dbmsType),         # DBMSType
+    stringValue(username),        # User
+    stringValue(password),        # Password
+    if domain == "": PrimitiveValue(kind: ptNull) else: stringValue(domain)   # Domain (NULL if empty)
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "ConnectEx",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Connecting to database at: ", dbLocation
+  let responseData = await client.invoke("ConnectEx", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 0:
+        echo "Successfully connected to database"
+      else:
+        echo "Failed to connect to database, error code: ", statusCode
+      return statusCode
+  
+  echo "Failed to connect to database, unexpected response"
+  raise newException(IOError, "Failed to connect to database")
+
 proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
@@ -259,12 +311,19 @@ proc downloader*(address: string, port: int, username, password, database, direc
     # Create connection object
     let connectionId = await createConnectionObject(client, sessionId)
     echo "Using connection ID: ", connectionId
+
+    # Connect to database
+    let connectStatus = await connectToDatabase(client, sessionId, connectionId, 
+                                        aliasInfo.dbName, aliasInfo.dbLocation, aliasInfo.dbmsType,
+                                        username, password)
     
     # TODO: Implement authentication
     
     # TODO: Implement file listing
     
     # TODO: Implement file download
+
+    # TODO: Implement graceful disconnect
     
   except Exception as e:
     echo "Error: ", e.msg
