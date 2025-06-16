@@ -472,6 +472,63 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
   var input = memoryInput(responseData)
   let responseMsg = readRemotingMessage(input)
   
+  if responseMsg.methodReturn.isSome:
+    let ret = responseMsg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode != 0:
+        echo "CreateQueryResultObjects failed with status code: ", statusCode
+        return @[]
+    
+    # The response structure includes:
+    # 1. An args array (ArraySingleObject) 
+    # 2. The Queue object (SystemClassWithMembersAndTypes)
+    # 3. The Queue's internal array (ArraySingleObject) containing the IDs
+    
+    # Find the Queue object in the referenced records
+    var queueObj: RemotingValue
+    var queueFound = false
+    
+    for record in responseMsg.referencedRecords:
+      if record.kind == rvClass:
+        let classRecord = record.classVal.record
+        if classRecord.kind == rtSystemClassWithMembersAndTypes:
+          if classRecord.systemClassWithMembersAndTypes.classInfo.name.value == "System.Collections.Queue":
+            queueObj = record
+            queueFound = true
+            break
+    
+    if queueFound:
+      # Extract the queue members
+      let queueMembers = queueObj.classVal.members
+      if queueMembers.len >= 4:  # Ensure we have all members
+        let sizeVal = queueMembers[3]  # _size member
+        
+        if sizeVal.kind == rvPrimitive and sizeVal.primitiveVal.kind == ptInt32:
+          let actualCount = sizeVal.primitiveVal.int32Val
+          echo "Server created ", actualCount, " query result objects"
+          
+          # Find the array object that contains the actual IDs
+          var resultIds: seq[int32] = @[]
+          
+          for record in responseMsg.referencedRecords:
+            if record.kind == rvArray:
+              let arrayRecord = record.arrayVal.record
+              if arrayRecord.kind == rtArraySingleObject:
+                # This should be the Queue's internal array
+                let elements = record.arrayVal.elements
+                
+                # Extract the IDs (up to actualCount)
+                for i in 0..<min(actualCount, elements.len.int32):
+                  let elem = elements[i]
+                  if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptInt32:
+                    resultIds.add(elem.primitiveVal.int32Val)
+                
+                if resultIds.len > 0:
+                  echo "Successfully retrieved ", resultIds.len, " query result object IDs"
+                  return resultIds
   
-  echo "Failed to create query result objects"
   return @[]

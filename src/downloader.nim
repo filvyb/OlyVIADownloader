@@ -72,6 +72,10 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if queryResultIds.len == 0:
       echo "Failed to create query result objects"
       return
+    echo "Created ", queryResultIds.len, " query result objects"
+    echo "First query result ID: ", queryResultIds[0]
+    echo "Last query result ID: ", queryResultIds[^1]
+    
     # TODO: Implement authentication
     
     # TODO: Implement file listing
