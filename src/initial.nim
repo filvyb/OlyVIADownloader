@@ -1,8 +1,6 @@
 import faststreams/inputs
 import asyncdispatch
-import strutils, os
-
-import structs
+import strutils
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
@@ -368,13 +366,112 @@ proc destroyConnectionObject*(client: NrtpTcpClient, sessionId: int32, connectio
   raise newException(IOError, "Failed to destroy connection object")
 
 
-proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: int32): Future[seq[Int32Queue]] {.async.} =
+proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: int32): Future[seq[int32]] {.async.} =
   ## Creates query result objects on the server
   ## Returns a sequence of object IDs that can be used for queries
   
   # Set the path to the server object
   client.setPath("LLRemoteServer")
 
-  # Create a "CreateQueryResultObjects" method call
-  # Use full type name with version info
-  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+  # Create serialization context
+  let ctx = newSerializationContext()
+  
+  # Create the array object first (will get ID 3)
+  let emptyArrayRecord = ArrayRecord(
+    kind: rtArraySingleObject,
+    arraySingleObject: ArraySingleObject(
+      recordType: rtArraySingleObject,
+      arrayInfo: ArrayInfo(
+        objectId: 0,  # Will be assigned during serialization
+        length: 32    # Initial capacity
+      )
+    )
+  )
+  
+  # Create null elements for the array
+  var arrayElements: seq[RemotingValue]
+  for i in 0..<32:
+    arrayElements.add(RemotingValue(kind: rvNull))
+  
+  let arrayValue = RemotingValue(
+    kind: rvArray,
+    arrayVal: ArrayValue(
+      record: emptyArrayRecord,
+      elements: arrayElements
+    )
+  )
+  
+  # Create the Queue class members with reference to array
+  let queueMembers = @[
+    RemotingValue(kind: rvReference, idRef: 3),                           # _array (reference to ID 3)
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _head
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _tail
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _size
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(200)),      # _growFactor (200 = 2.0 as percentage)
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0))         # _version
+  ]
+  
+  # Create member type info for System.Collections.Queue
+  let memberInfos = @[
+    (name: "_array", btype: btObjectArray, addInfo: AdditionalTypeInfo(kind: btObjectArray)),
+    (name: "_head", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
+    (name: "_tail", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
+    (name: "_size", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
+    (name: "_growFactor", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
+    (name: "_version", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32))
+  ]
+  
+  # Create the Queue class record
+  let queueClassRecord = systemClassWithMembersAndTypes("System.Collections.Queue", memberInfos)
+  
+  # Create the Queue RemotingValue (will get ID 2)
+  let queueValue = RemotingValue(
+    kind: rvClass,
+    classVal: ClassValue(
+      record: ClassRecord(
+        kind: rtSystemClassWithMembersAndTypes,
+        systemClassWithMembersAndTypes: queueClassRecord
+      ),
+      members: queueMembers
+    )
+  )
+  
+  # Create method call with ArgsIsArray flag
+  var flags: MessageFlags = {MessageFlag.ArgsIsArray, MessageFlag.NoContext}
+  
+  let call = BinaryMethodCall(
+    recordType: rtMethodCall,
+    messageEnum: flags,
+    methodName: newStringValueWithCode("CreateQueryResultObjects"),
+    typeName: newStringValueWithCode("dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")
+  )
+  
+  # Create the arguments array with reference to queue
+  let argsArray = @[
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sessionId)),  # Client
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(count)),      # nCount
+    RemotingValue(kind: rvReference, idRef: 2)                             # Reference to Queue (ID 2)
+  ]
+  
+  # Create the message with both the queue and array as referenced records
+  let msg = newRemotingMessage(ctx, 
+    methodCall = some(call), 
+    callArray = argsArray,
+    refs = @[queueValue, arrayValue]  # Queue gets ID 2, Array gets ID 3
+  )
+  
+  # Serialize and send
+  let requestData = serializeRemotingMessage(msg, ctx)
+  
+  echo "Creating ", count, " query result objects..."
+  let responseData = await client.invoke("CreateQueryResultObjects", 
+                                       "dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", 
+                                       false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let responseMsg = readRemotingMessage(input)
+  
+  
+  echo "Failed to create query result objects"
+  return @[]
