@@ -1,7 +1,7 @@
 import asyncdispatch
 import strutils, os
 
-import initial
+import comm/[initial, db]
 
 import DotNimRemoting/tcp/client
 
