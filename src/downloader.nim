@@ -2,6 +2,7 @@ import asyncdispatch
 import strutils, os
 
 import comm/[initial, db]
+import utils
 
 import DotNimRemoting/tcp/client
 
@@ -76,7 +77,25 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo "First query result ID: ", queryResultIds[0]
     echo "Last query result ID: ", queryResultIds[^1]
     
-    # TODO: Implement authentication
+    # Execute some query
+    let sqlQuery = "SELECT isnull( object_id('vw_DBParameters', 'V'), 0) as CNT"
+    let boostText = """
+      22 serialization::archive 4 0 0
+      1 0 0 0 1 -94 -1 0 0 0 1 2 0 0 1 0 0 0 1 5 1 1"""
+    let paramsIn = boostBinToZip(boostText)
+    let (status, paramsOut, results) = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[0],  # Use first query result object
+      paramsIn            # Input parameters in zipped boost format
+    )
+    if status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery, " (status code: ", status, ")"
+      return
     
     # TODO: Implement file listing
     

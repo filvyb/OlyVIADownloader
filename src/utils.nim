@@ -1,0 +1,88 @@
+import std/[base64, encodings, sequtils]
+import zippy/[deflate, crc]
+
+proc u16le(n: uint16): string =
+  result = newString(2)
+  result[0] = char(n and 0xFF)
+  result[1] = char((n shr 8) and 0xFF)
+
+proc u32le(n: uint32): string =
+  result = newString(4)
+  result[0] = char(n and 0xFF)
+  result[1] = char((n shr 8) and 0xFF)
+  result[2] = char((n shr 16) and 0xFF)
+  result[3] = char((n shr 24) and 0xFF)
+
+proc boostBinToZip*(boostText: string, filename = "serialized.bin"): seq[byte] =
+  ## Converts a Boost text archive string to a compressed binary in ZIP format.
+  ## Parameters:
+  ##   boostText - The Boost text archive string
+  ## Returns compressed binary in ZIP format.
+  let utf16 = convert(boostText, "utf-16", "utf-8")
+  let b64 = base64.encode(utf16)
+
+  var deflated = ""
+  deflate(deflated, cast[ptr UncheckedArray[uint8]](b64.cstring), b64.len, 8)
+
+  let crc        = crc32(b64)
+  let compSize   = uint32(deflated.len)
+  let uncompSize = uint32(b64.len)
+
+  var localHdr = ""
+  localHdr.add u32le(0x04034b50)      # Signature "PK\x03\x04"
+  localHdr.add u16le(20)              # Version needed to extract = 2.0
+  localHdr.add u16le(0)               # General purpose bit‑flag
+  localHdr.add u16le(8)               # Compression method = Deflate
+  localHdr.add u16le(0)               # File mod time (none)
+  localHdr.add u16le(0)               # File mod date (none)
+  localHdr.add u32le(crc)             # CRC‑32 over *uncompressed* data
+  localHdr.add u32le(compSize)        # compressed size
+  localHdr.add u32le(uncompSize)      # uncompressed size
+  localHdr.add u16le(uint16(filename.len))  # file‑name length
+  localHdr.add u16le(0)               # extra‑field length
+  localHdr.add filename               # file‑name
+
+  var central = ""
+  central.add u32le(0x02014b50)       # Signature "PK\x01\x02"
+  central.add u16le(0x002E)           # Version *made by* (46, host = FAT)
+  central.add u16le(20)               # Version needed to extract
+  central.add u16le(0)                # GP bit‑flag
+  central.add u16le(8)                # Compression = Deflate
+  central.add u16le(0)                # Mod time
+  central.add u16le(0)                # Mod date
+  central.add u32le(crc)
+  central.add u32le(compSize)
+  central.add u32le(uncompSize)
+  central.add u16le(uint16(filename.len))  # file‑name length
+  central.add u16le(0)                # extra length
+  central.add u16le(0)                # comment length
+  central.add u16le(0)                # disk num start
+  central.add u16le(0)                # internal attributes
+  central.add u32le(0)                # external attributes
+  central.add u32le(0)                # offset of local header (we start at 0)
+  central.add filename
+
+  var eocd = ""
+  eocd.add u32le(0x06054b50)          # Signature "PK\x05\x06"
+  eocd.add u16le(0)                   # disk number
+  eocd.add u16le(0)                   # disk where central dir starts
+  eocd.add u16le(1)                   # # of central dir records on this disk
+  eocd.add u16le(1)                   # total # of records
+  eocd.add u32le(uint32(central.len)) # size of central directory (bytes)
+  eocd.add u32le(uint32(uint32(localHdr.len) + compSize)) # offset to central dir
+  eocd.add u16le(0)                   # ZIP file comment length
+
+  var zip = localHdr
+  zip.add deflated
+  zip.add central
+  zip.add eocd
+
+  return zip.toSeq.mapIt(byte(it))
+  
+when isMainModule:
+  # Testing the boostBinToZip function
+  let boostText = """
+22 serialization::archive 4 0 0
+1 0 0 0 1 -94 -1 0 0 0 1 2 0 0 1 0 0 0 1 5 1 1"""
+  let compressedBinary = boostBinToZip(boostText)
+  echo "Hexadecimal: ", compressedBinary.mapIt(it.toHex(2)).join("")

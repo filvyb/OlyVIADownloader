@@ -1,6 +1,6 @@
 import faststreams/inputs
 import asyncdispatch
-import strutils
+import strutils, sequtils
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
@@ -280,3 +280,125 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
                   return resultIds
   
   return @[]
+
+proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
+             sqlCommandTexts: seq[string], sqlCommandType: int32, sqlCommandSubType: int32,
+             queryResultId: int32, paramsIn: seq[byte] = @[]): 
+             Future[tuple[status: int32, paramsOut: seq[byte], results: seq[byte]]] {.async.} =
+  ## Executes SQL commands on the server
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter)
+  ##   connectionId - The connection ID
+  ##   sqlCommandTexts - Array of SQL command strings to execute
+  ##   sqlCommandType - Type of SQL command
+  ##   sqlCommandSubType - Subtype of SQL command
+  ##   queryResultId - ID of the query result object to use
+  ##   paramsIn - Optional input parameters as binary data (typically a zip file)
+  ## Returns a tuple with:
+  ##   status - Status code (0 for success)
+  ##   paramsOut - Output parameters as binary data (typically a zip file)
+  ##   results - Query results as binary data (typically a zip file)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create serialization context
+  let ctx = newSerializationContext()
+  
+  # Create the SQL commands array (will get ID 2)
+  let sqlArrayElements = sqlCommandTexts.mapIt(RemotingValue(kind: rvString, 
+                                                             stringVal: LengthPrefixedString(value: it)))
+  
+  let sqlArrayValue = RemotingValue(
+    kind: rvArray,
+    arrayVal: ArrayValue(
+      record: ArrayRecord(
+        kind: rtArraySingleString,
+        arraySingleString: ArraySingleString(
+          recordType: rtArraySingleString,
+          arrayInfo: ArrayInfo(
+            objectId: 0,  # Will be assigned during serialization
+            length: sqlCommandTexts.len.int32
+          )
+        )
+      ),
+      elements: sqlArrayElements
+    )
+  )
+  
+  # Create the ParamsIn data if provided (will get ID 3)
+  var referencedRecords: seq[RemotingValue] = @[sqlArrayValue]
+  var paramsInRef: RemotingValue
+  
+  if paramsIn.len > 0:
+    # Create a BinaryObjectString to hold the binary data (zip file)
+    # BinaryObjectString is the correct type for binary data in MS-NRBF
+    let binaryObjString = BinaryObjectString(
+      recordType: rtBinaryObjectString,
+      objectId: 0,  # Will be assigned during serialization (ID 3)
+      value: LengthPrefixedString(value: cast[string](paramsIn))
+    )
+    
+    # Wrap it in a RemotingValue
+    let paramsInValue = RemotingValue(
+      kind: rvString,
+      stringVal: binaryObjString.value
+    )
+    
+    referencedRecords.add(paramsInValue)
+    paramsInRef = RemotingValue(kind: rvReference, idRef: 3)
+  else:
+    paramsInRef = RemotingValue(kind: rvNull)
+  
+  # Create method call with ArgsInArray flag
+  var flags: MessageFlags = {MessageFlag.ArgsInArray, MessageFlag.NoContext}
+  
+  let call = BinaryMethodCall(
+    recordType: rtMethodCall,
+    messageEnum: flags,
+    methodName: newStringValueWithCode("Execute"),
+    typeName: newStringValueWithCode("dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")
+  )
+  
+  # Create the arguments array
+  let argsArray = @[
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sessionId)),      # Client
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(connectionId)),   # Connection
+    RemotingValue(kind: rvReference, idRef: 2),                                # SqlCommandTexts reference
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sqlCommandType)), # SqlCommandType
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sqlCommandSubType)), # SqlCommandSubType
+    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(queryResultId)),  # QueryResult
+    paramsInRef,                                                                # ParamsIn (ref)
+    RemotingValue(kind: rvNull),                                               # ParamsOut (ref, null in request)
+    RemotingValue(kind: rvNull)                                                # Results (ref, null in request)
+  ]
+  
+  # Create the message
+  let msg = newRemotingMessage(ctx, 
+    methodCall = some(call), 
+    callArray = argsArray,
+    refs = referencedRecords
+  )
+  
+  # Serialize and send
+  let requestData = serializeRemotingMessage(msg, ctx)
+  
+  echo "Executing SQL command(s)..."
+  if sqlCommandTexts.len > 0:
+    echo "  First command: ", sqlCommandTexts[0][0..min(50, sqlCommandTexts[0].len-1)], 
+         if sqlCommandTexts[0].len > 50: "..." else: ""
+  
+  let responseData = await client.invoke("Execute", 
+                                       "dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", 
+                                       false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let responseMsg = readRemotingMessage(input)
+  
+  if responseMsg.methodReturn.isSome:
+    let ret = responseMsg.methodReturn.get
+    
+    # TODO implement parsing
+  
+  raise newException(IOError, "Failed to execute SQL command")
