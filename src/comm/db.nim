@@ -326,32 +326,46 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
     )
   )
   
-  # Create the ParamsIn data if provided (will get ID 3)
+  # Create the ParamsIn data if provided
   var referencedRecords: seq[RemotingValue] = @[sqlArrayValue]
   var paramsInRef: RemotingValue
+  var paramsInRefId: int32 = 0
   
   if paramsIn.len > 0:
-    # Create a BinaryObjectString to hold the binary data (zip file)
-    # BinaryObjectString is the correct type for binary data in MS-NRBF
-    let binaryObjString = BinaryObjectString(
-      recordType: rtBinaryObjectString,
-      objectId: 0,  # Will be assigned during serialization (ID 3)
-      value: LengthPrefixedString(value: cast[string](paramsIn))
-    )
+    # Create an ArraySinglePrimitive of bytes to hold the binary data
+    # Convert bytes to primitive values
+    let byteElements = paramsIn.mapIt(RemotingValue(
+      kind: rvPrimitive, 
+      primitiveVal: byteValue(it)
+    ))
     
-    # Wrap it in a RemotingValue
     let paramsInValue = RemotingValue(
-      kind: rvString,
-      stringVal: binaryObjString.value
+      kind: rvArray,
+      arrayVal: ArrayValue(
+        record: ArrayRecord(
+          kind: rtArraySinglePrimitive,
+          arraySinglePrimitive: ArraySinglePrimitive(
+            recordType: rtArraySinglePrimitive,
+            arrayInfo: ArrayInfo(
+              objectId: 0,  # Will be assigned during serialization
+              length: paramsIn.len.int32
+            ),
+            primitiveType: ptByte
+          )
+        ),
+        elements: byteElements
+      )
     )
     
     referencedRecords.add(paramsInValue)
-    paramsInRef = RemotingValue(kind: rvReference, idRef: 3)
+    # The params array will get ID 4 (after SQL array gets 2 and its string gets 3)
+    paramsInRefId = 4
+    paramsInRef = RemotingValue(kind: rvReference, idRef: paramsInRefId)
   else:
     paramsInRef = RemotingValue(kind: rvNull)
   
-  # Create method call with ArgsInArray flag
-  var flags: MessageFlags = {MessageFlag.ArgsInArray, MessageFlag.NoContext}
+  # Create method call with ArgsIsArray flag
+  var flags: MessageFlags = {MessageFlag.ArgsIsArray, MessageFlag.NoContext}
   
   let call = BinaryMethodCall(
     recordType: rtMethodCall,
