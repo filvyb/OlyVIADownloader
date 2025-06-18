@@ -414,6 +414,71 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
   if responseMsg.methodReturn.isSome:
     let ret = responseMsg.methodReturn.get
     
-    # TODO implement parsing
+    # Extract the return status
+    var status: int32 = -1
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      status = ret.returnValue.value.int32Val
+      if status != 0:
+        echo "Execute failed with status code: ", status
+        return (status, @[], @[])
+    
+    # The response structure based on packet analysis:
+    # 1. BinaryMethodReturn with status code (0 = success)
+    # 2. ArraySingleObject with 9 items (matching Execute's 9 parameters):
+    #    - Items 0-5: null values (Client, Connection, SqlCommandTexts, SqlCommandType, SqlCommandSubType, QueryResult)
+    #    - Item 6: MemberReference to ParamsIn (echoed back from request)
+    #    - Item 7: MemberReference to ParamsOut (output parameters)
+    #    - Item 8: MemberReference to Results (query results)
+    # 3. Three ArraySinglePrimitive objects containing ZIP files:
+    #    - ParamsIn: echoed back from request
+    #    - ParamsOut: output parameters as ZIP containing "serialized.bin"
+    #    - Results: query results as ZIP containing "Resultset.bin"
+    
+    # Find the array references in the method call array
+    var paramsInRef: int32 = 0
+    var paramsOutRef: int32 = 0
+    var resultsRef: int32 = 0
+    
+    if responseMsg.methodCallArray.len >= 9:
+      # Extract references from positions 6, 7, 8 (0-indexed)
+      if responseMsg.methodCallArray[6].kind == rvReference:
+        paramsInRef = responseMsg.methodCallArray[6].idRef
+      if responseMsg.methodCallArray[7].kind == rvReference:
+        paramsOutRef = responseMsg.methodCallArray[7].idRef
+      if responseMsg.methodCallArray[8].kind == rvReference:
+        resultsRef = responseMsg.methodCallArray[8].idRef
+    else:
+      echo "Unexpected response format: methodCallArray does not contain enough items"
+      raise newException(IOError, "Invalid response format from Execute")
+    
+    # Now find the actual byte arrays in the referenced records
+    var paramsOutBytes: seq[byte] = @[]
+    var resultsBytes: seq[byte] = @[]
+    
+    for record in responseMsg.referencedRecords:
+      if record.kind == rvArray:
+        let arrayRecord = record.arrayVal.record
+        if arrayRecord.kind == rtArraySinglePrimitive:
+          let arrayPrim = arrayRecord.arraySinglePrimitive
+          
+          # Check if this is one of our arrays by matching the expected IDs
+          # Note: The objectId is set during deserialization
+          if arrayPrim.arrayInfo.objectId == paramsOutRef:
+            # Extract ParamsOut bytes
+            for elem in record.arrayVal.elements:
+              if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+                paramsOutBytes.add(elem.primitiveVal.byteVal)
+            echo "Extracted ParamsOut: ", paramsOutBytes.len, " bytes"
+            
+          elif arrayPrim.arrayInfo.objectId == resultsRef:
+            # Extract Results bytes
+            for elem in record.arrayVal.elements:
+              if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+                resultsBytes.add(elem.primitiveVal.byteVal)
+            echo "Extracted Results: ", resultsBytes.len, " bytes"
+    
+    echo "Execute completed successfully"
+    return (status, paramsOutBytes, resultsBytes)
   
   raise newException(IOError, "Failed to execute SQL command")
