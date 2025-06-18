@@ -235,12 +235,13 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
     # 1. An args array (ArraySingleObject) 
     # 2. The Queue object (SystemClassWithMembersAndTypes)
     # 3. The Queue's internal array (ArraySingleObject) containing the IDs
-    
     # Find the Queue object in the referenced records
     var queueObj: RemotingValue
     var queueFound = false
-    
-    for record in responseMsg.referencedRecords:
+
+    let merged = responseMsg.methodCallArray & responseMsg.referencedRecords
+
+    for record in merged:
       if record.kind == rvClass:
         let classRecord = record.classVal.record
         if classRecord.kind == rtSystemClassWithMembersAndTypes:
@@ -248,7 +249,7 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
             queueObj = record
             queueFound = true
             break
-    
+
     if queueFound:
       # Extract the queue members
       let queueMembers = queueObj.classVal.members
