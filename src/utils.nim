@@ -134,11 +134,14 @@ proc extractValue(node: XmlNode): string =
   let valueNode = pValueNode.child("value")
   if valueNode == nil: return ""
   
-  # Extract only the text from the <text> child node, not all inner text
+  # Check if there's a <text> child element first
   let textNode = valueNode.child("text")
-  if textNode == nil: return ""
-  
-  return textNode.innerText
+  if textNode != nil:
+    # Extract only the text from the <text> child node
+    return textNode.innerText
+  else:
+    # Fall back to extracting the entire value content
+    return valueNode.innerText
 
 proc parseBoostSqlXml*(xmlContent: string): SqlResultSet =
   ## Parse Boost serialization XML containing SQL query results
