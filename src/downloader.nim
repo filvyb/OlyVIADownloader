@@ -142,6 +142,25 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Connection is not active, cannot proceed with query results"
       return
 
+    let sqlQuery3 = "select isnull(DB_ID('" & database & "'), 0) as db_cnt"
+    # Getting the database ID, I assume
+    let sqlQuery3Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery3],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[2],  # Use third query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery3Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery3, " (status code: ", sqlQuery3Res.status, ")"
+      return
+
+    #echo $sqlQuery3Res.results
+
     # TODO: Implement DB communication
 
     # TODO: Implement file listing
