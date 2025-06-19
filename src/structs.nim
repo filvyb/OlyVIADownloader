@@ -9,3 +9,7 @@ type
   
   Int32Queue* = ref object of Queue
     data*: seq[int32]
+
+  SqlResultSet* = object
+    columns*: seq[string]
+    rows*: seq[seq[string]]

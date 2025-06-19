@@ -2,7 +2,6 @@ import asyncdispatch
 import strutils, os
 
 import comm/[initial, db]
-import utils
 
 import DotNimRemoting/tcp/client
 
@@ -114,7 +113,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery1Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery1, " (status code: ", sqlQuery1Res.status, ")"
       return
-    
+
+    #sqlQuery1Res.results.prettyPrint()
+
     # TODO: Implement file listing
     
     # TODO: Implement file download

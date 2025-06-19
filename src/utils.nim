@@ -1,5 +1,6 @@
-import std/[base64, encodings, os, sequtils, strutils, tempfiles]
+import std/[base64, encodings, os, sequtils, strutils, tempfiles, xmlparser, xmltree, tables]
 import zippy/[deflate, crc, ziparchives]
+import structs
 
 const b64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -118,6 +119,155 @@ proc digUpBoostBin*(zipData: seq[byte]): string =
   let boost = convert(utf16, "utf-8", "utf-16")
   return boost
 
+proc extractValue(node: XmlNode): string =
+  ## Extract the actual value from the deeply nested structure
+  # Navigate through: second -> cvaluecbin -> pValue -> value
+  let secondNode = node.child("second")
+  if secondNode == nil: return ""
+  
+  let cvaluecbinNode = secondNode.child("cvaluecbin")
+  if cvaluecbinNode == nil: return ""
+  
+  let pValueNode = cvaluecbinNode.child("pValue")
+  if pValueNode == nil: return ""
+  
+  let valueNode = pValueNode.child("value")
+  if valueNode == nil: return ""
+  
+  return valueNode.innerText
+
+proc parseBoostSqlXml*(xmlContent: string): SqlResultSet =
+  ## Parse Boost serialization XML containing SQL query results
+  ## Returns a SqlResultSet with column names and row data
+  result = SqlResultSet(columns: @[], rows: @[])
+  
+  # Parse the XML
+  let doc = parseXml(xmlContent)
+  
+  # Extract column names from resultfieldnames
+  let fieldNamesNode = doc.child("resultfieldnames")
+  if fieldNamesNode != nil:
+    for item in fieldNamesNode.findAll("item"):
+      result.columns.add(item.innerText)
+  
+  # Extract row data from resultrows
+  let resultRowsNode = doc.child("resultrows")
+  if resultRowsNode != nil:
+    # Find all row items (first level items)
+    for rowItem in resultRowsNode.findAll("item"):
+      var rowData: seq[string] = @[]
+      
+      # Get the second node which contains the columns
+      let columnsContainer = rowItem.child("second")
+      if columnsContainer != nil:
+        # Find all column items within this row
+        for colItem in columnsContainer.findAll("item"):
+          let value = extractValue(colItem)
+          rowData.add(value)
+      
+      if rowData.len > 0:
+        result.rows.add(rowData)
+
+proc parseBoostSqlXmlFile*(filename: string): SqlResultSet =
+  ## Parse Boost serialization XML from a file
+  let content = readFile(filename)
+  return parseBoostSqlXml(content)
+
+proc toTable*(resultSet: SqlResultSet): Table[string, seq[string]] =
+  ## Convert SqlResultSet to a Table with column names as keys
+  result = initTable[string, seq[string]]()
+  for i, col in resultSet.columns:
+    var columnData: seq[string] = @[]
+    for row in resultSet.rows:
+      if i < row.len:
+        columnData.add(row[i])
+    result[col] = columnData
+
+proc prettyPrint*(resultSet: SqlResultSet) =
+  ## Pretty print the SQL result set as a table
+  if resultSet.columns.len == 0:
+    echo "No results"
+    return
+  
+  # Calculate column widths
+  var widths: seq[int] = @[]
+  for i, col in resultSet.columns:
+    var maxWidth = col.len
+    for row in resultSet.rows:
+      if i < row.len and row[i].len > maxWidth:
+        maxWidth = row[i].len
+    widths.add(maxWidth + 2)
+  
+  # Print header
+  echo "┌", widths.mapIt("─".repeat(it)).join("┬"), "┐"
+  stdout.write "│"
+  for i, col in resultSet.columns:
+    stdout.write " ", col.alignLeft(widths[i] - 2), " │"
+  echo ""
+  echo "├", widths.mapIt("─".repeat(it)).join("┼"), "┤"
+  
+  # Print rows
+  for row in resultSet.rows:
+    stdout.write "│"
+    for i, val in row:
+      if i < widths.len:
+        stdout.write " ", val.alignLeft(widths[i] - 2), " │"
+    echo ""
+  
+  echo "└", widths.mapIt("─".repeat(it)).join("┴"), "┘"
+
+proc parseBoostSqlXmlFromZip*(zipData: seq[byte]): SqlResultSet =
+  ## Parse Boost SQL XML from a ZIP archive
+  ## Returns a SqlResultSet with column names and row data
+  var boostXml = digUpBoostBin(zipData)
+  if "<boost_serialization" notin boostXml:
+    raise newException(ValueError, "Invalid Boost serialization XML format")
+  if "</boost_serialization>" notin boostXml:
+    boostXml &= "</boost_serialization>"  # Ensure it is well-formed XML
+
+  return parseBoostSqlXml(boostXml)
+
+proc prettyPrint*(table: Table[string, seq[string]]) =
+  ## Pretty print a Table[string, seq[string]] as a formatted table
+  if table.len == 0:
+    echo "Empty table"
+    return
+  
+  # Get column names and determine the maximum number of rows
+  let columns = toSeq(table.keys)
+  let maxRows = if columns.len > 0: max(columns.mapIt(table[it].len)) else: 0
+  
+  if maxRows == 0:
+    echo "Table has no data rows"
+    return
+  
+  # Calculate column widths
+  var widths: seq[int] = @[]
+  for col in columns:
+    var maxWidth = col.len
+    for value in table[col]:
+      if value.len > maxWidth:
+        maxWidth = value.len
+    widths.add(maxWidth + 2)  # Add padding
+  
+  # Print header
+  echo "┌", widths.mapIt("─".repeat(it)).join("┬"), "┐"
+  stdout.write "│"
+  for i, col in columns:
+    stdout.write " ", col.alignLeft(widths[i] - 2), " │"
+  echo ""
+  echo "├", widths.mapIt("─".repeat(it)).join("┼"), "┤"
+  
+  # Print rows
+  for rowIdx in 0..<maxRows:
+    stdout.write "│"
+    for i, col in columns:
+      let value = if rowIdx < table[col].len: table[col][rowIdx] else: ""
+      stdout.write " ", value.alignLeft(widths[i] - 2), " │"
+    echo ""
+  
+  echo "└", widths.mapIt("─".repeat(it)).join("┴"), "┘"
+
 when isMainModule:
   # Testing the boostBinToZip function
   let boostText = """
@@ -125,3 +275,4 @@ when isMainModule:
 1 0 0 0 1 -94 -1 0 0 0 1 2 0 0 1 0 0 0 1 5 1 1"""
   let compressedBinary = boostBinToZip(boostText)
   echo "Hexadecimal: ", compressedBinary.mapIt(it.toHex(2)).join("")
+  

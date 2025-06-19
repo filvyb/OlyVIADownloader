@@ -1,6 +1,8 @@
 import faststreams/inputs
 import asyncdispatch
-import strutils, sequtils
+import strutils, sequtils, tables
+
+import ../[utils, structs]
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
@@ -285,7 +287,7 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
 proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
              sqlCommandTexts: seq[string], sqlCommandType: int32, sqlCommandSubType: int32,
              queryResultId: int32, paramsIn: seq[byte] = @[]): 
-             Future[tuple[status: int32, paramsOut: seq[byte], results: seq[byte]]] {.async.} =
+             Future[tuple[status: int32, paramsOut: seq[byte], results: Table[string, seq[string]]]] {.async.} =
   ## Executes SQL commands on the server
   ## Parameters:
   ##   sessionId - The session ID (Client parameter)
@@ -298,7 +300,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
   ## Returns a tuple with:
   ##   status - Status code (0 for success)
   ##   paramsOut - Output parameters as binary data (typically a zip file)
-  ##   results - Query results as binary data (typically a zip file)
+  ##   results - Parsed SQL result set containing columns and rows
   
   # Set the path to the server object
   client.setPath("LLRemoteServer")
@@ -421,7 +423,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
       status = ret.returnValue.value.int32Val
       if status != 0:
         echo "Execute failed with status code: ", status
-        return (status, @[], @[])
+        return (status, @[], initTable[string, seq[string]]())
     
     # The response structure based on packet analysis:
     # 1. BinaryMethodReturn with status code (0 = success)
@@ -479,6 +481,6 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
             echo "Extracted Results: ", resultsBytes.len, " bytes"
     
     echo "Execute completed successfully"
-    return (status, paramsOutBytes, resultsBytes)
+    return (status, paramsOutBytes, parseBoostSqlXmlFromZip(resultsBytes).toTable())
   
   raise newException(IOError, "Failed to execute SQL command")
