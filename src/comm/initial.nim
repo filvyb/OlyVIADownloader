@@ -157,6 +157,55 @@ proc createConnectionObject*(client: NrtpTcpClient, sessionId: int32): Future[in
   echo "Failed to create connection object"
   raise newException(IOError, "Failed to create connection object")
 
+proc isConnected*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[bool] {.async.} =
+  ## Checks if the connection is still active
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter in the interface)
+  ##   connectionId - The connection ID (Connection parameter in the interface)
+  ## Returns the connection status (1 for connected, 0 for disconnected)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create an "IsConnected" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client/Session ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "IsConnected",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Checking connection status for session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("IsConnected", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let isConnected = ret.returnValue.value.int32Val
+      if isConnected == 1:
+        echo "Connection is active"
+        return true
+      else:
+        echo "Connection is not active"
+        return false
+
+  echo "Failed to check connection status"
+  raise newException(IOError, "Failed to check connection status")
 
 proc disconnect*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
   ## Gracefully disconnects from the server
