@@ -136,11 +136,11 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery2, " (status code: ", sqlQuery2Res.status, ")"
       return
 
+    #sqlQuery2Res.results.prettyPrint()
+
     if not (await isConnected(client, sessionId, connectionId)):
       echo "Connection is not active, cannot proceed with query results"
       return
-
-    #sqlQuery2Res.results.prettyPrint()
 
     # TODO: Implement DB communication
 

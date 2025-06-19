@@ -481,6 +481,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
             echo "Extracted Results: ", resultsBytes.len, " bytes"
     
     echo "Execute completed successfully"
+    #echo digUpBoostBin(resultsBytes)
     return (status, paramsOutBytes, parseBoostSqlXmlFromZip(resultsBytes).toTable())
   
   raise newException(IOError, "Failed to execute SQL command")
