@@ -187,11 +187,12 @@ proc toTable*(resultSet: SqlResultSet): Table[string, seq[string]] =
         columnData.add(row[i])
     result[col] = columnData
 
-proc prettyPrint*(resultSet: SqlResultSet) =
-  ## Pretty print the SQL result set as a table
+proc `$`*(resultSet: SqlResultSet): string =
+  ## Convert the SQL result set to a formatted table string
   if resultSet.columns.len == 0:
-    echo "No results"
-    return
+    return "No results"
+  
+  var lines: seq[string] = @[]
   
   # Calculate column widths
   var widths: seq[int] = @[]
@@ -202,23 +203,25 @@ proc prettyPrint*(resultSet: SqlResultSet) =
         maxWidth = row[i].len
     widths.add(maxWidth + 2)
   
-  # Print header
-  echo "┌", widths.mapIt("─".repeat(it)).join("┬"), "┐"
-  stdout.write "│"
+  # Add header
+  lines.add("┌" & widths.mapIt("─".repeat(it)).join("┬") & "┐")
+  var headerLine = "│"
   for i, col in resultSet.columns:
-    stdout.write " ", col.alignLeft(widths[i] - 2), " │"
-  echo ""
-  echo "├", widths.mapIt("─".repeat(it)).join("┼"), "┤"
+    headerLine.add(" " & col.alignLeft(widths[i] - 2) & " │")
+  lines.add(headerLine)
+  lines.add("├" & widths.mapIt("─".repeat(it)).join("┼") & "┤")
   
-  # Print rows
+  # Add rows
   for row in resultSet.rows:
-    stdout.write "│"
+    var rowLine = "│"
     for i, val in row:
       if i < widths.len:
-        stdout.write " ", val.alignLeft(widths[i] - 2), " │"
-    echo ""
+        rowLine.add(" " & val.alignLeft(widths[i] - 2) & " │")
+    lines.add(rowLine)
   
-  echo "└", widths.mapIt("─".repeat(it)).join("┴"), "┘"
+  lines.add("└" & widths.mapIt("─".repeat(it)).join("┴") & "┘")
+  
+  return lines.join("\n")
 
 proc parseBoostSqlXmlFromZip*(zipData: seq[byte]): SqlResultSet =
   ## Parse Boost SQL XML from a ZIP archive
@@ -231,19 +234,19 @@ proc parseBoostSqlXmlFromZip*(zipData: seq[byte]): SqlResultSet =
 
   return parseBoostSqlXml(boostXml)
 
-proc prettyPrint*(table: Table[string, seq[string]]) =
-  ## Pretty print a Table[string, seq[string]] as a formatted table
+proc `$`*(table: Table[string, seq[string]]): string =
+  ## Convert a Table[string, seq[string]] to a formatted table string
   if table.len == 0:
-    echo "Empty table"
-    return
+    return "Empty table"
   
   # Get column names and determine the maximum number of rows
   let columns = toSeq(table.keys)
   let maxRows = if columns.len > 0: max(columns.mapIt(table[it].len)) else: 0
   
   if maxRows == 0:
-    echo "Table has no data rows"
-    return
+    return "Table has no data rows"
+  
+  var lines: seq[string] = @[]
   
   # Calculate column widths
   var widths: seq[int] = @[]
@@ -254,23 +257,25 @@ proc prettyPrint*(table: Table[string, seq[string]]) =
         maxWidth = value.len
     widths.add(maxWidth + 2)  # Add padding
   
-  # Print header
-  echo "┌", widths.mapIt("─".repeat(it)).join("┬"), "┐"
-  stdout.write "│"
+  # Add header
+  lines.add("┌" & widths.mapIt("─".repeat(it)).join("┬") & "┐")
+  var headerLine = "│"
   for i, col in columns:
-    stdout.write " ", col.alignLeft(widths[i] - 2), " │"
-  echo ""
-  echo "├", widths.mapIt("─".repeat(it)).join("┼"), "┤"
+    headerLine.add(" " & col.alignLeft(widths[i] - 2) & " │")
+  lines.add(headerLine)
+  lines.add("├" & widths.mapIt("─".repeat(it)).join("┼") & "┤")
   
-  # Print rows
+  # Add rows
   for rowIdx in 0..<maxRows:
-    stdout.write "│"
+    var rowLine = "│"
     for i, col in columns:
       let value = if rowIdx < table[col].len: table[col][rowIdx] else: ""
-      stdout.write " ", value.alignLeft(widths[i] - 2), " │"
-    echo ""
+      rowLine.add(" " & value.alignLeft(widths[i] - 2) & " │")
+    lines.add(rowLine)
   
-  echo "└", widths.mapIt("─".repeat(it)).join("┴"), "┘"
+  lines.add("└" & widths.mapIt("─".repeat(it)).join("┴") & "┘")
+  
+  return lines.join("\n")
 
 when isMainModule:
   # Testing the boostBinToZip function
