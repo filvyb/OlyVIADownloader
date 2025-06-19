@@ -2,7 +2,7 @@ import faststreams/inputs
 import asyncdispatch
 import strutils, sequtils, tables
 
-import ../[utils, structs]
+import ../[utils]
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
@@ -484,3 +484,65 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
     return (status, paramsOutBytes, parseBoostSqlXmlFromZip(resultsBytes).toTable())
   
   raise newException(IOError, "Failed to execute SQL command")
+
+proc getMaxBufferedRowCount*(client: NrtpTcpClient, sessionId: int32, queryResultId: int32): 
+                           Future[tuple[status: int32, maxBufferedRows: uint32]] {.async.} =
+  ## Gets the maximum number of buffered rows for a query result object
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter)
+  ##   queryResultId - The query result handle (QueryHandle parameter)
+  ## Returns a tuple with:
+  ##   status - Status code (0 for success)
+  ##   maxBufferedRows - The maximum number of buffered rows
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create method call with the required parameters
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId, queryResultId, and placeholder for ref parameter
+  let args = @[
+    int32Value(sessionId),      # Client parameter
+    int32Value(queryResultId),  # QueryHandle parameter
+    uint32Value(0)             # Placeholder for ref uMaxBufferedRows parameter
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "GetMaxBufferedRowCount",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Getting max buffered row count for query result ID: ", queryResultId
+  let responseData = await client.invoke("GetMaxBufferedRowCount", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      
+      # Check if we have arguments in the response
+      if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 3:
+        # Extract the reference parameter
+        # Note: The first two parameters are returned as null (unchanged input values)
+        let maxBufferedRows = ret.args[2].value.uint32Val  # Third argument is the output value
+        
+        if statusCode == 0:
+          echo "Max buffered rows: ", maxBufferedRows
+        else:
+          echo "GetMaxBufferedRowCount failed with status code: ", statusCode
+          
+        return (statusCode, maxBufferedRows)
+      
+      raise newException(IOError, "Invalid response format: not enough arguments returned")
+  
+  raise newException(IOError, "Failed to get max buffered row count")

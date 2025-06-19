@@ -116,6 +116,10 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     #sqlQuery1Res.results.prettyPrint()
 
+    var maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[0])
+
+    # TODO: Implement DB communication
+    
     # TODO: Implement file listing
     
     # TODO: Implement file download
