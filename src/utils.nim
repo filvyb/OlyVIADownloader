@@ -1,5 +1,5 @@
-import std/[base64, encodings, sequtils]
-import zippy/[deflate, crc]
+import std/[base64, encodings, sequtils, macros, memfiles]
+import zippy/[deflate, crc, ziparchives]
 
 proc u16le(n: uint16): string =
   result = newString(2)
@@ -78,7 +78,70 @@ proc boostBinToZip*(boostText: string, filename = "serialized.bin"): seq[byte] =
   zip.add eocd
 
   return zip.toSeq.mapIt(byte(it))
+
+macro hijackOpenZipArchive*(): untyped =
+  ## Hijacks the `openZipArchive` procedure to replace `memfiles.open` with `memfiles.mapMem`
+  ## Creates a new procedure `openZipArchiveFromMemory`
+  # Get the original procedure definition
+  let originalProc = bindSym("openZipArchive")
+  let impl = originalProc.getImpl()
   
+  # Create a new procedure with the same signature
+  result = impl.copy()
+  
+  # Function to recursively replace the memfiles.open call
+  proc replaceMemFileOpen(node: NimNode): NimNode =
+    case node.kind:
+    of nnkCall:
+      # Check if this is a call to memfiles.open
+      if node.len >= 2 and 
+         node[0].kind == nnkDotExpr and
+         node[0][0].repr == "memfiles" and
+         node[0][1].repr == "open":
+        # Replace with memfiles.mapMem
+        result = nnkCall.newTree(
+          nnkDotExpr.newTree(
+            newIdentNode("memfiles"),
+            newIdentNode("mapMem")
+          ),
+          node[1] # Keep the same argument (zipPath)
+        )
+      else:
+        # Recursively process other calls
+        result = node.copy()
+        for i in 0..<node.len:
+          result[i] = replaceMemFileOpen(node[i])
+    else:
+      # For non-call nodes, recursively process children
+      result = node.copy()
+      for i in 0..<node.len:
+        result[i] = replaceMemFileOpen(node[i])
+  
+  # Apply the replacement to the procedure body
+  result[6] = replaceMemFileOpen(result[6]) # Body is at index 6
+  
+  # Change the procedure name to avoid conflicts
+  result[0] = newIdentNode("openZipArchiveFromMemory")
+
+# Generate the hijacked function
+hijackOpenZipArchive()
+
+proc unzipArchive*(zipData: string): seq[string] =
+  ## Unzips a ZIP archive and returns the contained files as strings.
+  ## Parameters:
+  ##   zipData - The ZIP archive data as a string.
+  ## Returns a sequence of strings, each representing a file in the archive.
+  
+  let archive = openZipArchiveFromMemory(zipData)
+
+  try:
+    for path in archive.walkFiles:
+      let contents = archive.extractFile(path)
+      result.add(contents)
+
+  finally:
+    archive.close()
+
 when isMainModule:
   # Testing the boostBinToZip function
   let boostText = """
