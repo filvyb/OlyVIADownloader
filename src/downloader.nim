@@ -2,6 +2,7 @@ import asyncdispatch
 import strutils, os
 
 import comm/[initial, db]
+import utils
 
 import DotNimRemoting/tcp/client
 
@@ -99,7 +100,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       0x00, 0x00, 0x00, 0x73, 0x65, 0x72, 0x69, 0x61, 0x6c, 0x69, 0x7a, 0x65, 0x64, 0x2e, 0x62, 0x69,
       0x6e, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x3c, 0x00, 0x00,
       0x00, 0xa5, 0x00, 0x00, 0x00, 0x00, 0x00
-    ] 
+    ]
     let sqlQuery1Res = await executeSql(
       client, 
       sessionId, 
@@ -118,8 +119,27 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     var maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[0])
 
+    let sqlQuery2 = "SELECT vw_DBParameters.[Parameter], vw_DBParameters.[Value] FROM [dbo].[vw_DBParameters]"
+
+    let sqlQuery2Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery2],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[1],  # Use second query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery2Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery2, " (status code: ", sqlQuery2Res.status, ")"
+      return
+
+    #sqlQuery2Res.results.prettyPrint()
+
     # TODO: Implement DB communication
-    
+
     # TODO: Implement file listing
     
     # TODO: Implement file download
