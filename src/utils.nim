@@ -1,5 +1,7 @@
-import std/[base64, encodings, os, sequtils, tempfiles]
+import std/[base64, encodings, os, sequtils, strutils, tempfiles]
 import zippy/[deflate, crc, ziparchives]
+
+const b64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 proc u16le(n: uint16): string =
   result = newString(2)
@@ -79,7 +81,6 @@ proc boostBinToZip*(boostText: string, filename = "serialized.bin"): seq[byte] =
 
   return zip.toSeq.mapIt(byte(it))
 
-
 proc unzipArchive*(zipData: seq[byte]): seq[string] =
   ## Unzips a ZIP archive and returns the contained files as strings.
   ## Parameters:
@@ -100,6 +101,22 @@ proc unzipArchive*(zipData: seq[byte]): seq[string] =
   finally:
     archive.close()
     removeFile(tempFile)
+
+proc digUpBoostBin*(zipData: seq[byte]): string =
+  ## Extracts a Boost archive file from a ZIP archive.
+  ## Parameters:
+  ##   zipData - The ZIP archive data as a sequence of bytes.
+  ##   filename - The name of the Boost archive file to extract.
+  ## Returns the contents of the Boost archive file as a string.
+
+  var file = unzipArchive(zipData)[0]  # Assuming the first file is the Boost archive
+  if file == "":
+    raise newException(ValueError, "No files found in the ZIP archive")
+  file = file.filterIt(it in b64Alphabet).join("")  # Filter out non-Base64 characters
+  #file = file.replace("\r\n", "")
+  let utf16 = decode(file)
+  let boost = convert(utf16, "utf-8", "utf-16")
+  return boost
 
 when isMainModule:
   # Testing the boostBinToZip function
