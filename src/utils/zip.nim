@@ -22,8 +22,13 @@ proc boostBinToZip*(boostText: string, filename = "serialized.bin"): seq[byte] =
   ## Parameters:
   ##   boostText - The Boost text archive string
   ## Returns compressed binary in ZIP format.
+  let boostText = boostText.replace("\n", "").strip()
   let utf16 = convert(boostText, "utf-16", "utf-8")
-  let b64 = base64.encode(utf16)
+  var b64 = base64.encode(utf16)
+  b64 = b64.replace("\n", "\r\n")
+  if b64.endsWith("\r\n"):
+    b64.setLen(b64.len - 2)
+  b64.add("\x00\x00")
 
   var deflated = ""
   deflate(deflated, cast[ptr UncheckedArray[uint8]](b64.cstring), b64.len, 8)
@@ -81,7 +86,7 @@ proc boostBinToZip*(boostText: string, filename = "serialized.bin"): seq[byte] =
   zip.add central
   zip.add eocd
 
-  return zip.toSeq.mapIt(byte(it))
+  result = zip.toSeq.mapIt(byte(it))
 
 proc unzipArchive*(zipData: seq[byte]): seq[string] =
   ## Unzips a ZIP archive and returns the contained files as strings.
