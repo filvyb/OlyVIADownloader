@@ -183,6 +183,39 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery4Res.results
 
+    #maybe
+    #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[3])
+
+    let sqlQuery5 = """CREATE TABLE [dbo].[#tb_ProcParams] (
+                    [id_Param] bigint NOT NULL,
+                    [type_Param] nvarchar (1) NOT NULL,
+                    [to_XML] int NULL,
+                    [int_value] bigint NULL,
+                    [string_value] nvarchar (4000) NULL,
+                    [date_value] datetime NULL,
+                    [memo_value] nvarchar(max) NULL,
+                    [dbl_value] float NULL,
+                    [bin_value] image NULL,
+                    PRIMARY KEY ([id_Param])
+                    )"""
+    
+    let sqlQuery5Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery5],        # SQL commands array
+      1,                  # SqlCommandType
+      5,                 # SqlCommandSubType  
+      queryResultIds[4],  # Use fifth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery5Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery5, " (status code: ", sqlQuery5Res.status, ")"
+      return
+
+    echo sqlQuery5Res.results
+
     # TODO: Implement DB communication
 
     # TODO: Implement file listing
