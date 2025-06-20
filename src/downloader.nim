@@ -345,6 +345,129 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery12Res.results
 
+    let sqlQuery13 = "[dbo].[sis_ReadDBParameter]"
+    let boostText13 = "22 serialization::archive 4 0 0 4 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 11 szParameter 1 5 1 0 1 8192 1 0 0 1 14 DbSetupEdition 1 -98 1 7 szValue 1 0 1 1 1 -98 1 9 ret_Value 1 0 1"
+    let paramsIn13 = boostBinToZip(boostText13)
+    let sqlQuery13Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery13],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[12],  # Use thirteenth query result object
+      paramsIn13            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery13Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery13, " (status code: ", sqlQuery13Res.status, ")"
+      return
+
+    echo sqlQuery13Res.results
+
+    let sqlQuery14 = "SELECT CONVERT(INT, SERVERPROPERTY ('IsFullTextInstalled')) AS FULL_TEXT_PROP"
+    let sqlQuery14Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery14],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[13],  # Use fourteenth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery14Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery14, " (status code: ", sqlQuery14Res.status, ")"
+      return
+
+    echo sqlQuery14Res.results
+
+    # maybe
+    #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[13])
+
+    # 561
+    # get user id twice here?
+
+    let sqlQuery15 = """SELECT vw_DocumentIOHandlers.[ModuleName], 
+                                vw_DocumentIOHandlers.[DocIoType], 
+                                vw_DocumentIOHandlers.[Version], 
+                                vw_DocumentIOHandlers.[Position] 
+                                FROM [dbo].[vw_DocumentIOHandlers] 
+                                ORDER BY [Position] asc"""
+    let sqlQuery15Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery15],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[14],  # Use fifteenth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery15Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery15, " (status code: ", sqlQuery15Res.status, ")"
+      return
+
+    echo sqlQuery15Res.results
+
+    let sqlQuery16 = """SELECT vw_AttributeHandlers.[ModuleName], vw_AttributeHandlers.[Version], vw_AttributeHandlers.[Position] 
+                                FROM [dbo].[vw_AttributeHandlers] 
+                                ORDER BY [Position] asc"""
+    let sqlQuery16Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery16],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[15],  # Use sixteenth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery16Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery16, " (status code: ", sqlQuery16Res.status, ")"
+      return
+
+    echo sqlQuery16Res.results
+
+    let sqlQuery17 = "SELECT vw_Languages.[id_Language], vw_Languages.[name_Language], vw_Languages.[is_DefaultLanguage] FROM [dbo].[vw_Languages]"
+
+    let sqlQuery17Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery17],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[16],  # Use seventeenth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery17Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery17, " (status code: ", sqlQuery17Res.status, ")"
+      return
+
+    echo sqlQuery17Res.results # there only one lol
+    # 596
+    let sqlQuery18 = "set language us_english"
+    let sqlQuery18Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery18],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[17],  # Use eighteenth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery18Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery18, " (status code: ", sqlQuery18Res.status, ")"
+      return
+
+    echo sqlQuery18Res.results
 
     # TODO: Implement DB communication
 
