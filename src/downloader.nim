@@ -305,7 +305,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     let sqlQuery11 = "[dbo].[sis_GetUserID]"
     let sname = if sqlQuery7Res.results.hasKey("SNAME"): sqlQuery7Res.results["SNAME"][0].strip() else: raise newException(ValueError, "SNAME not found in results")
-    let boostText11 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 1 12 RETURN_VALUE 1 0 1 1 1 -98 0 10 szUserName 1 5 1 0 1 8192 1 0 0 1 12 hist_student" & $sname.len & " " & sname
+    let boostText11 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 1 12 RETURN_VALUE 1 0 1 1 1 -98 0 10 szUserName 1 5 1 0 1 8192 1 0 0 1 " & $sname.len & " " & sname
     let paramsIn11 = boostBinToZip(boostText11)
 
     let sqlQuery11Res = await executeSql(

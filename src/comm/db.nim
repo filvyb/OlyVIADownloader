@@ -481,7 +481,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
             echo "Extracted Results: ", resultsBytes.len, " bytes"
     
     echo "Execute completed successfully"
-    #echo digUpBoostBin(resultsBytes)
+    #echo digUpBoostBin(paramsOutBytes)
     #echo $parseBoostSqlXmlFromZip(resultsBytes)
     return (status, paramsOutBytes, parseBoostSqlXmlFromZip(resultsBytes).toTable())
   
