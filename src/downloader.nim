@@ -339,6 +339,25 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery10Res.results
 
+    let sqlQuery11 = "[dbo].[sis_GetUserID]"
+
+    let sqlQuery11Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery11],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[10],  # Use eleventh query result object
+      paramsIn9            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery11Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery11, " (status code: ", sqlQuery11Res.status, ")"
+      return
+
+    echo sqlQuery11Res.results
+
 
     # TODO: Implement DB communication
 
