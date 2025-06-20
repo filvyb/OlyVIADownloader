@@ -2,7 +2,7 @@ import faststreams/inputs
 import asyncdispatch
 import strutils, sequtils, tables
 
-import ../[utils]
+import ../utils/[zip, boost]
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
