@@ -325,7 +325,25 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery11Res.results
 
+    let sqlQuery12 = "[dbo].[sis_OpenDatabaseChecks]"
+    let boostText12 = "22 serialization::archive 4 0 0 1 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1"
+    let paramsIn12 = boostBinToZip(boostText12)
+    let sqlQuery12Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery12],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[11],  # Use twelfth query result object
+      paramsIn12            # Input parameters in zipped boost format
+    )
 
+    if sqlQuery12Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery12, " (status code: ", sqlQuery12Res.status, ")"
+      return
+
+    echo sqlQuery12Res.results
 
 
     # TODO: Implement DB communication
