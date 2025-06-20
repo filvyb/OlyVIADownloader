@@ -216,6 +216,45 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery5Res.results
 
+    let sqlQuery6 = "[dbo].[sis_GetUserRightsMode]"
+
+    let sqlQuery6Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery6],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[5],  # Use sixth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery6Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery6, " (status code: ", sqlQuery6Res.status, ")"
+      return
+
+    # is supposed to be empty, no idea why
+    echo sqlQuery6Res.results
+
+    let sqlQuery7 = "SELECT SUSER_SNAME() AS SNAME"
+
+    let sqlQuery7Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery7],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[6],  # Use seventh query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery7Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery7, " (status code: ", sqlQuery7Res.status, ")"
+      return
+
+    echo sqlQuery7Res.results
+
     # TODO: Implement DB communication
 
     # TODO: Implement file listing
