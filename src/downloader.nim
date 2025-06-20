@@ -115,7 +115,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery1, " (status code: ", sqlQuery1Res.status, ")"
       return
 
-    #sqlQuery1Res.results.prettyPrint()
+    echo sqlQuery1Res.results
 
     var maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[0])
 
@@ -136,7 +136,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery2, " (status code: ", sqlQuery2Res.status, ")"
       return
 
-    #sqlQuery2Res.results.prettyPrint()
+    echo sqlQuery2Res.results
 
     if not (await isConnected(client, sessionId, connectionId)):
       echo "Connection is not active, cannot proceed with query results"
@@ -159,7 +159,29 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery3, " (status code: ", sqlQuery3Res.status, ")"
       return
 
-    #echo $sqlQuery3Res.results
+    echo sqlQuery3Res.results
+
+    #maybe
+    #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[2])
+
+    let sqlQuery4 = "SELECT isnull( object_id('vw_GetDbVersion', 'V'), 0) as CNT"
+
+    let sqlQuery4Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery4],        # SQL commands array
+      3,                  # SqlCommandType
+      50,                 # SqlCommandSubType  
+      queryResultIds[3],  # Use fourth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery4Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery4, " (status code: ", sqlQuery4Res.status, ")"
+      return
+
+    echo sqlQuery4Res.results
 
     # TODO: Implement DB communication
 
