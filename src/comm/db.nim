@@ -550,3 +550,179 @@ proc getMaxBufferedRowCount*(client: NrtpTcpClient, sessionId: int32, queryResul
       raise newException(IOError, "Invalid response format: not enough arguments returned")
   
   raise newException(IOError, "Failed to get max buffered row count")
+
+proc beginTran*(client: NrtpTcpClient, clientId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Begins a transaction on the remote server
+  ## 
+  ## Parameters:
+  ##   - clientId: The client identifier
+  ##   - connectionId: The connection identifier
+  ## 
+  ## Returns:
+  ##   Transaction ID (typically 1 for success)
+  
+  # Create the two Int32 arguments
+  let args = @[
+    int32Value(clientId),
+    int32Value(connectionId)
+  ]
+  
+  # The type name from the capture includes the full assembly info
+  # But createMethodCallRequest appends version info, so we need just the base part
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create the request
+  let requestData = createMethodCallRequest("BeginTran", typeName, args)
+  
+  # Send the request and get response
+  let responseData = await client.invoke("BeginTran", typeName, false, requestData)
+  
+  # Parse the response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  # Extract the return value
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    if MessageFlag.ReturnValueInline in ret.messageEnum:
+      if ret.returnValue.primitiveType == ptInt32:
+        return ret.returnValue.value.int32Val
+      else:
+        raise newException(ValueError, "Expected Int32 return value, got: " & $ret.returnValue.primitiveType)
+  
+  raise newException(IOError, "Invalid response from BeginTran")
+
+proc commitTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Commits a transaction on the database connection
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter)
+  ##   connectionId - The connection ID
+  ## Returns the status code (1 for success based on the captured packet)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "CommitTran" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest("CommitTran", typeName, args)
+  
+  echo "Committing transaction for session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("CommitTran", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 1:
+        echo "Transaction committed successfully"
+      else:
+        echo "Transaction commit returned status: ", statusCode
+      return statusCode
+  
+  echo "Failed to commit transaction, unexpected response"
+  raise newException(IOError, "Failed to commit transaction")
+
+proc inTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Checks if a transaction is currently active on the database connection
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter)
+  ##   connectionId - The connection ID
+  ## Returns the status code
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "InTran" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest("InTran", typeName, args)
+  
+  echo "Checking if in transaction for session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("InTran", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 1:
+        echo "Transaction is active"
+      else:
+        echo "No active transaction"
+      return statusCode
+  
+  echo "Failed to check transaction status, unexpected response"
+  raise newException(IOError, "Failed to check transaction status")
+
+proc rollbackTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
+  ## Rolls back a transaction on the database connection
+  ## Parameters:
+  ##   sessionId - The session ID (Client parameter)
+  ##   connectionId - The connection ID
+  ## Returns the status code (1 for success based on the captured packet)
+  
+  # Set the path to the server object
+  client.setPath("LLRemoteServer")
+
+  # Create a "RollbackTran" method call
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+  
+  # Create arguments: sessionId and connectionId
+  let args = @[
+    int32Value(sessionId),    # Client ID
+    int32Value(connectionId)  # Connection ID
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest("RollbackTran", typeName, args)
+  
+  echo "Rolling back transaction for session ID: ", sessionId, ", connection ID: ", connectionId
+  let responseData = await client.invoke("RollbackTran", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let statusCode = ret.returnValue.value.int32Val
+      if statusCode == 1:
+        echo "Transaction rolled back successfully"
+      else:
+        echo "Transaction rollback returned status: ", statusCode
+      return statusCode
+  
+  echo "Failed to roll back transaction, unexpected response"
+  raise newException(IOError, "Failed to roll back transaction")
