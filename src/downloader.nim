@@ -324,6 +324,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
 
     echo sqlQuery11Res.results
+    let userId = digUpBoostBin(sqlQuery11Res.paramsOut)
 
     let sqlQuery12 = "[dbo].[sis_OpenDatabaseChecks]"
     let boostText12 = "22 serialization::archive 4 0 0 1 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1"
@@ -643,6 +644,54 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery27, " (status code: ", sqlQuery27Res.status, ")"
       return
     echo sqlQuery27Res.results
+
+    let sqlQuery28 = "[dbo].[sis_ReadSettings]"
+    let boostText28 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 7 nUserID 1 2 1 0 1 5 1 2" # 2 is the user ID, but I don't know how to get it from a previous query
+    let paramsIn28 = boostBinToZip(boostText28)
+    let sqlQuery28Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery28],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[35],  # Use thirty-sixth query result object
+      paramsIn28            # Input parameters in zipped boost format
+    )
+    if sqlQuery28Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery28, " (status code: ", sqlQuery28Res.status, ")"
+      return
+    echo sqlQuery28Res.results
+
+    # second read settings with different user ID?
+
+    let sqlQuery29 = "[dbo].[sis_SetStringProcParam]"
+
+    let sqlQuery30 = "[dbo].[sis_SetIntProcParam]"
+
+    let sqlQuery31 = "[dbo].[sis_ReadAllUserForms]"
+
+    let sqlQuery32 = "[dbo].[sis_GetIntProcParam]"
+
+    let sqlQuery33 = "[dbo].[sis_GetStringProcParam]"
+
+    let sqlQuery34 = "[dbo].[sis_DescribeProc]"
+
+    let sqlQuery35 = "[dbo].[sis_Exlv_CleanupTimeouts]"
+    # 1532
+    let sqlQuery36 = "[dbo].[sis_Exlv_DeleteLogEntry]"
+
+    let sqlQuery37 = "[dbo].[sis_ur_GetUserActiveRole]"
+
+    let sqlQuery38 = "[dbo].[sis_Exlv_CleanupTimeouts]"
+
+    let sqlQuery39 = "[dbo].[sis_Exlv_GetStateInfo]"
+    # 1625
+    let sqlQuery40 = "[dbo].[sis_Exlv_WriteLogEntryEx]"
+
+
+
+
 
     # TODO: Implement DB communication
 
