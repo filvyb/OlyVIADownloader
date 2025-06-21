@@ -15,7 +15,6 @@ proc parseFlagXml*(xmlContent: string): JsonNode =
       
       for propNode in propertySetNode.findAll("Property"):
         var property = newJObject()
-        echo "Processing Property node: ", propNode
         
         # Get the ID attribute
         let idAttr = propNode.attr("ID")

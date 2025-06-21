@@ -542,6 +542,27 @@ proc downloader*(address: string, port: int, username, password, database, direc
       
       echo "Results for RKey ", rkeyStripped, ": "
       echo sqlQuery21Res.results
+    
+    let sqlQuery22 = """SELECT vw_RecordTypeAndAttrTbl.[AttributeTableRKey], 
+                             vw_RecordTypeAndAttrTbl.[RecordTypeRKey], 
+                             vw_RecordTypeAndAttrTbl.[RelationType] 
+                             FROM [dbo].[vw_RecordTypeAndAttrTbl]"""
+    let sqlQuery22Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery22],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[29],  # Use thirtieth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery22Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery22, " (status code: ", sqlQuery22Res.status, ")"
+      return
+    
+    echo sqlQuery22Res.results
 
     # TODO: Implement DB communication
 
