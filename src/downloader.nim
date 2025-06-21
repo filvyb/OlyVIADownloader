@@ -509,26 +509,39 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     echo sqlQuery20Res.results
 
+    # Loop through all RKey values from sqlQuery20
     let sqlQuery21 = "SELECT vw_PicklistValues.[Value] FROM [dbo].[vw_PicklistValues] WHERE [RKey] = :B0 ORDER BY [Position] asc"
-    let rkey21 = if sqlQuery20Res.results.hasKey("RKey"): sqlQuery20Res.results["RKey"][0].strip() else: raise newException(ValueError, "RKey not found in results")
-    let boostText21 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 5 1 0 1 8192 1 0 0 1 " & $rkey21.len & " " & rkey21
-    let paramsIn21 = boostBinToZip(boostText21)
-    let sqlQuery21Res = await executeSql(
-      client, 
-      sessionId, 
-      connectionId,
-      @[sqlQuery21],        # SQL commands array
-      1,                  # SqlCommandType
-      1,                 # SqlCommandSubType  
-      queryResultIds[20],  # Use twenty-first query result object
-      paramsIn1            # Input parameters in zipped boost format
-    )
+    
+    if not sqlQuery20Res.results.hasKey("RKey"):
+      raise newException(ValueError, "RKey not found in results")
+    
+    let rkeys = sqlQuery20Res.results["RKey"]
+    for i, rkey21 in rkeys:
+      let rkeyStripped = rkey21.strip()
+      echo "Processing RKey [", i + 1, "/", rkeys.len, "]: ", rkeyStripped
+      
+      let boostText21 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 5 1 0 1 8192 1 0 0 1 " & $rkeyStripped.len & " " & rkeyStripped
+      let paramsIn21 = boostBinToZip(boostText21)
+      
+      # Use a different query result object for each iteration to avoid conflicts
+      let queryResultIndex = 20 + (i mod 10)  # Cycle through query result objects 20-29
+      let sqlQuery21Res = await executeSql(
+        client, 
+        sessionId, 
+        connectionId,
+        @[sqlQuery21],        # SQL commands array
+        1,                  # SqlCommandType
+        1,                 # SqlCommandSubType  
+        queryResultIds[queryResultIndex],  # Use different query result objects
+        paramsIn21            # Input parameters in zipped boost format
+      )
 
-    if sqlQuery21Res.status != 0:
-      echo "Failed to execute SQL query: ", sqlQuery21, " (status code: ", sqlQuery21Res.status, ")"
-      return
-
-    echo sqlQuery21Res.results
+      if sqlQuery21Res.status != 0:
+        echo "Failed to execute SQL query for RKey ", rkeyStripped, ": ", sqlQuery21, " (status code: ", sqlQuery21Res.status, ")"
+        continue
+      
+      echo "Results for RKey ", rkeyStripped, ": "
+      echo sqlQuery21Res.results
 
     # TODO: Implement DB communication
 
