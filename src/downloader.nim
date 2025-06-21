@@ -1,5 +1,5 @@
 import asyncdispatch
-import strutils, os, tables
+import strutils, os, tables, sequtils
 
 import comm/[initial, db]
 import utils/[boost, zip]
@@ -502,11 +502,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
       queryResultIds[19],  # Use twentieth query result object
       paramsIn1            # Input parameters in zipped boost format
     )
-
     if sqlQuery20Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery20, " (status code: ", sqlQuery20Res.status, ")"
       return
-
     echo sqlQuery20Res.results
 
     # Loop through all RKey values from sqlQuery20
@@ -535,11 +533,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
         queryResultIds[queryResultIndex],  # Use different query result objects
         paramsIn21            # Input parameters in zipped boost format
       )
-
       if sqlQuery21Res.status != 0:
         echo "Failed to execute SQL query for RKey ", rkeyStripped, ": ", sqlQuery21, " (status code: ", sqlQuery21Res.status, ")"
         continue
-      
       echo "Results for RKey ", rkeyStripped, ": "
       echo sqlQuery21Res.results
     
@@ -557,12 +553,60 @@ proc downloader*(address: string, port: int, username, password, database, direc
       queryResultIds[29],  # Use thirtieth query result object
       paramsIn1            # Input parameters in zipped boost format
     )
-
     if sqlQuery22Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery22, " (status code: ", sqlQuery22Res.status, ")"
       return
-    
     echo sqlQuery22Res.results
+
+    let boostText23 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 1 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    let paramsIn23 = boostBinToZip(boostText23)
+    let sqlQuery23Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery19],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[30],  # Use thirty-first query result object
+      paramsIn23            # Input parameters in zipped boost format
+    )
+    if sqlQuery23Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery23Res.status, ")"
+      return
+    echo toSeq(keys(sqlQuery23Res.results))
+
+    let boostText24 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 2 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    let paramsIn24 = boostBinToZip(boostText24)
+    let sqlQuery24Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery19],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[31],  # Use thirty-second query result object
+      paramsIn24            # Input parameters in zipped boost format
+    )
+    if sqlQuery24Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery24Res.status, ")"
+      return
+    echo toSeq(keys(sqlQuery24Res.results))
+
+    let sqlQuery25 = "SELECT vw_Constraints.[RecTypeMain], vw_Constraints.[RecTypeChild], vw_Constraints.[AcceptAsChild], vw_Constraints.[VisibleAsChild], vw_Constraints.[SearchableAsChild] FROM [dbo].[vw_Constraints] ORDER BY [RecTypeMain] asc"
+    let sqlQuery25Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery25],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[32],  # Use thirty-third query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+    if sqlQuery25Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery25, " (status code: ", sqlQuery25Res.status, ")"
+      return
+    echo sqlQuery25Res.results
 
     # TODO: Implement DB communication
 
