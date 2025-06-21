@@ -1,5 +1,46 @@
-import std/[sequtils, strutils, xmlparser, xmltree, tables]
+import std/[sequtils, strutils, xmlparser, xmltree, tables, json]
 import ../structs
+
+proc parseFlagXml*(xmlContent: string): JsonNode =
+  ## Parse PropertySet XML and convert to JSON
+  ## Returns a JSON object with properties
+  result = newJObject()
+  
+  try:
+    let doc = parseXml(xmlContent)
+    let propertySetNode = if doc.tag == "PropertySet": doc else: doc.child("PropertySet")
+    
+    if propertySetNode != nil:
+      var properties = newJArray()
+      
+      for propNode in propertySetNode.findAll("Property"):
+        var property = newJObject()
+        echo "Processing Property node: ", propNode
+        
+        # Get the ID attribute
+        let idAttr = propNode.attr("ID")
+        if idAttr != "":
+          property["ID"] = newJString(idAttr)
+        
+        # Get PName
+        let pNameNode = propNode.child("PName")
+        if pNameNode != nil:
+          property["PName"] = newJString(pNameNode.innerText)
+        
+        # Get value (could be dword, string, etc.)
+        for child in propNode:
+          if child.tag != "PName":
+            property["ValueType"] = newJString(child.tag)
+            property["Value"] = newJString(child.innerText)
+            break
+        
+        properties.add(property)
+      
+      result["Properties"] = properties
+    
+  except CatchableError:
+    # If parsing fails, return error info
+    result["error"] = newJString("Failed to parse PropertySet XML")
 
 proc extractValue(node: XmlNode): string =
   ## Extract the actual value from the deeply nested structure
@@ -19,8 +60,19 @@ proc extractValue(node: XmlNode): string =
   # Check if there's a <text> child element first
   let textNode = valueNode.child("text")
   if textNode != nil:
-    # Extract only the text from the <text> child node
-    return textNode.innerText
+    let textContent = textNode.innerText
+    
+    # Check if the text content is XML by looking for XML declaration or root elements
+    if textContent.contains("<?xml") or textContent.contains("&lt;?xml") or (textContent.contains("<") and textContent.contains(">")):
+      # Try to parse as PropertySet XML and convert to JSON
+      try:
+        let jsonResult = parseFlagXml(textContent)
+        return $jsonResult
+      except:
+        # If parsing fails, return the original text
+        return textContent
+    else:
+      return textContent
   else:
     # Fall back to extracting the entire value content
     return valueNode.innerText
