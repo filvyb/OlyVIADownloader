@@ -449,8 +449,8 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery17, " (status code: ", sqlQuery17Res.status, ")"
       return
 
-    echo sqlQuery17Res.results # there only one lol
-    # 596
+    echo sqlQuery17Res.results # there's only one lol
+
     let sqlQuery18 = "set language us_english"
     let sqlQuery18Res = await executeSql(
       client, 
@@ -468,6 +468,46 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
 
     echo sqlQuery18Res.results
+    # 601
+    let sqlQuery19 = "[dbo].[sis_ReadDbObjects]"
+    let langid = if sqlQuery17Res.results.hasKey("id_Language"): sqlQuery17Res.results["id_Language"][0].strip() else: raise newException(ValueError, "id_Language not found in results")
+    let boostText19 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 7 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    let paramsIn19 = boostBinToZip(boostText19)
+    let sqlQuery19Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery19],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[18],  # Use nineteenth query result object
+      paramsIn19            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery19Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery19Res.status, ")"
+      return
+
+    echo sqlQuery19Res.results
+
+    # ReadDbObjects maybe thrice, not sure why
+    let sqlQuery20 = "SELECT vw_Picklist.[RKey], vw_Picklist.[Datatype], vw_Picklist.[Flags], vw_Picklist.[GUID] FROM [dbo].[vw_Picklist]"
+    let sqlQuery20Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery20],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[19],  # Use twentieth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+
+    if sqlQuery20Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery20, " (status code: ", sqlQuery20Res.status, ")"
+      return
+
+    echo sqlQuery20Res.results
 
     # TODO: Implement DB communication
 
