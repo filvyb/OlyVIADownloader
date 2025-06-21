@@ -608,6 +608,42 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery25Res.results
 
+    let sqlQuery26 = """SELECT vw_RecordTypeAndAttrTbl.[AttributeTableRKey], 
+                                       vw_RecordTypeAndAttrTbl.[RecordTypeRKey], 
+                                       vw_RecordTypeAndAttrTbl.[RelationType] 
+                                FROM [dbo].[vw_RecordTypeAndAttrTbl]"""
+    let sqlQuery26Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery26],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[33],  # Use thirty-fourth query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+    if sqlQuery26Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery26, " (status code: ", sqlQuery26Res.status, ")"
+      return
+    echo sqlQuery26Res.results
+    
+    # 1357
+    let sqlQuery27 = "[dbo].[sis_ur_GetUserActiveRole]"
+    let sqlQuery27Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery27],        # SQL commands array
+      2,                  # SqlCommandType
+      71,                 # SqlCommandSubType  
+      queryResultIds[34],  # Use thirty-fifth query result object
+      paramsIn11            # Input parameters in zipped boost format
+    )
+    if sqlQuery27Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery27, " (status code: ", sqlQuery27Res.status, ")"
+      return
+    echo sqlQuery27Res.results
+
     # TODO: Implement DB communication
 
     # TODO: Implement file listing
