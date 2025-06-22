@@ -522,7 +522,6 @@ proc downloader*(address: string, port: int, username, password, database, direc
       let boostText21 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 5 1 0 1 8192 1 0 0 1 " & $rkeyStripped.len & " " & rkeyStripped
       let paramsIn21 = boostBinToZip(boostText21)
       
-      # Use a different query result object for each iteration to avoid conflicts
       let queryResultIndex = 20 + (i mod 10)  # Cycle through query result objects 20-29
       let sqlQuery21Res = await executeSql(
         client, 
@@ -667,7 +666,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     let sqlQuery29 = "[dbo].[sis_SetStringProcParam]"
 
-    let sqlQuery30 = "[dbo].[sis_SetIntProcParam]"
+    let sqlQuery30 = "[dbo].[sis_SetIntProcParam]" # probably used to set sql that's executed with BeginTran and CommitTran
 
     let sqlQuery31 = "[dbo].[sis_ReadAllUserForms]"
 
@@ -689,6 +688,82 @@ proc downloader*(address: string, port: int, username, password, database, direc
     # 1625
     let sqlQuery40 = "[dbo].[sis_Exlv_WriteLogEntryEx]"
 
+    # begin transaction
+    # commit transaction
+    # maybe not needed
+
+    let sqlQuery41 = "[dbo].[sis_GetAvailRecordGroups]"
+
+    let sqlQuery42 = "SELECT vw_Roles.[name_Role] FROM [dbo].[vw_Roles]"
+    let sqlQuery42Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery42],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[36],  # Use thirty-seventh query result object
+      paramsIn1            # Input parameters in zipped boost format
+    )
+    if sqlQuery42Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery42, " (status code: ", sqlQuery42Res.status, ")"
+      return
+    echo sqlQuery42Res.results
+
+    let sqlQuery43 = """SELECT vw_UsersInRole.[name_User], 
+                                       vw_UsersInRole.[desc_User], 
+                                       vw_UsersInRole.[is_Group] 
+                                FROM [dbo].[vw_UsersInRole] 
+                                WHERE vw_UsersInRole.[name_Role] = :B0"""
+    
+    if not sqlQuery42Res.results.hasKey("name_Role"):
+      raise newException(ValueError, "name_Role not found in results")
+    let roles = sqlQuery42Res.results["name_Role"]
+    for i, role in roles:
+      let roleStripped = role.strip()
+      echo "Processing role [", i + 1, "/", roles.len, "]: ", roleStripped
+      let boostText43 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 5 1 0 1 8192 1 0 0 1 " & $roleStripped.len & " " & roleStripped
+      let paramsIn43 = boostBinToZip(boostText43)
+      let queryResultIndex = 37 + (i mod 10)  # Cycle through query result objects 37-46
+      let sqlQuery43Res = await executeSql(
+        client, 
+        sessionId, 
+        connectionId,
+        @[sqlQuery43],        # SQL commands array
+        1,                  # SqlCommandType
+        1,                 # SqlCommandSubType  
+        queryResultIds[queryResultIndex],  # Use different query result objects
+        paramsIn43            # Input parameters in zipped boost format
+      )
+      if sqlQuery43Res.status != 0:
+        echo "Failed to execute SQL query for role ", roleStripped, ": ", sqlQuery43, " (status code: ", sqlQuery43Res.status, ")"
+        continue
+      echo "Results for role ", roleStripped, ": "
+      echo sqlQuery43Res.results
+    # 1724
+    let sqlQuery44 = """SELECT vw_NetImgServers.[id_Server], vw_NetImgServers.[ServerName], 
+                               vw_NetImgServers.[Protocol], vw_NetImgServers.[Port], 
+                               vw_NetImgServers.[DbGUID], vw_NetImgServers.[ProtocolVersion], 
+                               vw_NetImgServers.[BuildNo] 
+                        FROM [dbo].[vw_NetImgServers] 
+                        WHERE [id_Server] = :B0"""
+    # this contains the server ID, but I don't know where it is and how to get it from a previous query, but here it's 1
+    let boostText44 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 2 1 0 1 5 1 1"
+    let paramsIn44 = boostBinToZip(boostText44)
+    let sqlQuery44Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery44],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[47],  # Use thirty-eighth query result object
+      paramsIn44            # Input parameters in zipped boost format
+    )
+    if sqlQuery44Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery44, " (status code: ", sqlQuery44Res.status, ")"
+      return
+    echo sqlQuery44Res.results
 
 
 
