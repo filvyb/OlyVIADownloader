@@ -765,8 +765,23 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery44Res.results
 
-
-
+    let sqlQuery45 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE ((t1.[attRecRecordTypeID] =  :B1)OR (t1.[attRecRecordTypeID] =  :B0))"
+    let boostText45 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 2 1 0 1 5 1 13 1 -99 -1 2 B1 1 2 1 0 1 5 1 6"
+    let paramsIn45 = boostBinToZip(boostText45)
+    let sqlQuery45Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery45],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[48],  # Use thirty-ninth query result object
+      paramsIn45            # Input parameters in zipped boost format
+    )
+    if sqlQuery45Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery45, " (status code: ", sqlQuery45Res.status, ")"
+      return
+    echo sqlQuery45Res.results
 
     # TODO: Implement DB communication
 
