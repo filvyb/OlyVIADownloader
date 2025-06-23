@@ -1,7 +1,7 @@
 import asyncdispatch
 import strutils, os, tables, sequtils
 
-import comm/[initial, db]
+import comm/[initial, db, files]
 import utils/[boost, zip]
 
 import DotNimRemoting/tcp/client
@@ -783,9 +783,40 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery45Res.results
 
-    # TODO: Implement DB communication
+    # 3934
+    let sqlQuery46 = """SELECT tb_SubDocuments_IOType_5.[ID], 
+                                       tb_SubDocuments_IOType_5.[attRecID], 
+                                       tb_SubDocuments_IOType_5.[id_NetImgServer], 
+                                       tb_SubDocuments_IOType_5.[VolumeGUID], 
+                                       tb_SubDocuments_IOType_5.[GUID], 
+                                       tb_SubDocuments_IOType_5.[RelativePath], 
+                                       tb_SubDocuments_IOType_5.[FileName], 
+                                       tb_SubDocuments_IOType_5.[FileSize], 
+                                       tb_SubDocuments_IOType_5.[EntryType] 
+                                FROM [dbo].[tb_SubDocuments_IOType_5] 
+                                WHERE [attRecID] = :B0"""
+    let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 5384"
+    let paramsIn46 = boostBinToZip(boostText46)
+    let sqlQuery46Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery46],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[49],  # Use fortieth query result object
+      paramsIn46            # Input parameters in zipped boost format
+    )
+    if sqlQuery46Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
+      return
+    echo sqlQuery46Res.results
 
-    # TODO: Implement file listing
+    # TODO: Implement DB communication
+    #3969
+    let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
+    let databaseGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
+    let fileListResult = await getFileList(client, serverUrl, databaseGuid)
     
     # TODO: Implement file download
     
