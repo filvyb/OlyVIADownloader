@@ -822,6 +822,18 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Invalid image GUID: ", databaseImageGuid
     #3969
     let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
+    for file in fileListResult.fileNames:
+      echo "File: ", file
+      let openStatus = await openFile(client, serverUrl, databaseImageGuid, file)
+      if openStatus != 0:
+        echo "Failed to open file: ", file, " (status code: ", openStatus, ")"
+        continue
+      let fileSize = await getFileSize(client, serverUrl, databaseImageGuid, file)
+      if fileSize.fileSize == 0:
+        echo "Failed to get file size for: ", file, " (status code: ", fileSize, ")"
+        continue
+      echo "File size for ", file, ": ", fileSize, " bytes"
+
 
     # TODO: Implement file download
     

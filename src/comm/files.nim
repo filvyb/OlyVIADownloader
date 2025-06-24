@@ -23,10 +23,9 @@ proc getFileList*(client: NrtpTcpClient, serverURL: string, databaseGUID: string
   # Create serialization context
   let ctx = newSerializationContext()
   
-  # Create method call with ArgsInline flag (exactly 3 arguments as shown in packet)
+  # Create method call with ArgsInline flag
   var flags: MessageFlags = {MessageFlag.ArgsInline, MessageFlag.NoContext}
   
-  # Create the exact type name as shown in the packet (Version 1.1.0.0)
   let fullTypeName = "RemotingWrapper.RemoteFileServer, RemotingWrapper, Version=1.1.0.0, Culture=neutral, PublicKeyToken=null"
   
   var call = BinaryMethodCall(
@@ -36,7 +35,6 @@ proc getFileList*(client: NrtpTcpClient, serverURL: string, databaseGUID: string
     typeName: newStringValueWithCode(fullTypeName)
   )
   
-  # Create exactly 3 arguments as shown in the packet
   var args: seq[ValueWithCode] = @[]
   args.add(toValueWithCode(stringValue(serverURL)))      # strServerURL
   args.add(toValueWithCode(stringValue(databaseGUID)))   # strDatabaseGUID
@@ -140,7 +138,6 @@ proc isImageValid*(client: NrtpTcpClient, imageId: string, databaseGuid: string)
   # Set the path to the image server object
   client.setPath("DotNetServer.WebImageAccess")
 
-  # Create an "IsValid" method call
   let typeName = "RemoteImageAccess.IImage, RemoteImageAccess"
   
   # Create arguments: imageId and databaseGuid
@@ -179,3 +176,137 @@ proc isImageValid*(client: NrtpTcpClient, imageId: string, databaseGuid: string)
   
   echo "Failed to check image validity, unexpected response"
   raise newException(IOError, "Failed to check image validity")
+
+proc openFile*(client: NrtpTcpClient, serverURL: string, databaseGUID: string, 
+               fileName: string, accessMode: uint32 = 0x80000000'u32): Future[int32] {.async.} =
+  ## Opens a file on the remote file server
+  ## Parameters:
+  ##   serverURL - The server URL/identifier (GUID format)
+  ##   databaseGUID - The database GUID
+  ##   fileName - The name of the file to open
+  ##   accessMode - The access mode (default: 0x80000000)
+  ## Returns the status code (0 for success)
+  
+  client.setPath("RemotingWrapper.RemoteFileServer")
+
+  let ctx = newSerializationContext()
+  
+  var flags: MessageFlags = {MessageFlag.ArgsInline, MessageFlag.NoContext}
+  
+  let fullTypeName = "RemotingWrapper.RemoteFileServer, RemotingWrapper, Version=1.1.0.0, Culture=neutral, PublicKeyToken=null"
+  
+  var call = BinaryMethodCall(
+    recordType: rtMethodCall,
+    messageEnum: flags,
+    methodName: newStringValueWithCode("Open"),
+    typeName: newStringValueWithCode(fullTypeName)
+  )
+  
+  var args: seq[ValueWithCode] = @[]
+  args.add(toValueWithCode(stringValue(serverURL)))      # strServerURL
+  args.add(toValueWithCode(stringValue(databaseGUID)))   # strDatabaseGUID
+  args.add(toValueWithCode(stringValue(fileName)))       # strFileName
+  args.add(toValueWithCode(uint32Value(accessMode)))     # nAccessMode
+  
+  call.args = args
+  
+  # Create the message
+  let msg = newRemotingMessage(ctx, methodCall = some(call))
+  
+  # Serialize and send
+  let requestData = serializeRemotingMessage(msg, ctx)
+  
+  echo "Opening file on server..."
+  echo "  Server URL: ", serverURL
+  echo "  Database GUID: ", databaseGUID
+  echo "  File Name: ", fileName
+  echo "  Access Mode: 0x", accessMode.toHex()
+  
+  let responseData = await client.invoke("Open", fullTypeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let responseMsg = readRemotingMessage(input)
+  
+  if responseMsg.methodReturn.isSome:
+    let ret = responseMsg.methodReturn.get
+    
+    # Extract the return status
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let status = ret.returnValue.value.int32Val
+      if status == 0:
+        echo "File opened successfully"
+      else:
+        echo "Failed to open file with status code: ", status
+      return status
+  
+  raise newException(IOError, "Failed to open file")
+
+proc getFileSize*(client: NrtpTcpClient, serverGUID: string, entryGUID: string, 
+                  fileName: string): Future[tuple[status: int32, fileSize: int64]] {.async.} =
+  ## Gets the size of a file from the remote file server
+  ## Parameters:
+  ##   serverGUID - The server GUID
+  ##   entryGUID - The entry GUID
+  ##   fileName - The name of the file
+  ## Returns a tuple with:
+  ##   status - Status code (0 for success)
+  ##   fileSize - Size of the file in bytes
+  
+  # Set the path to the RemoteFileServer object
+  client.setPath("RemotingWrapper.RemoteFileServer")
+
+  # Create method call with the required parameters
+  let typeName = "RemotingWrapper.RemoteFileServer, RemotingWrapper"
+  
+  # Create arguments: serverGUID, entryGUID, fileName, and placeholder for ref parameter
+  let args = @[
+    stringValue(serverGUID),    # strServer parameter
+    stringValue(entryGUID),     # strEntryGUID parameter
+    stringValue(fileName),      # strFileName parameter
+    int64Value(0)              # Placeholder for ref strFileSize parameter
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "GetFileSize",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Getting file size for: ", fileName
+  echo "  Server GUID: ", serverGUID
+  echo "  Entry GUID: ", entryGUID
+  
+  let responseData = await client.invoke("GetFileSize", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value
+    var status: int32 = -1
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      status = ret.returnValue.value.int32Val
+      if status != 0:
+        echo "GetFileSize failed with status code: ", status
+        return (status, 0'i64)
+    
+    # Check if we have arguments in the response
+    if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 4:
+      # Extract the reference parameter
+      # The first three parameters are returned as null (unchanged input values)
+      # The fourth parameter is the output file size
+      let fileSize = ret.args[3].value.int64Val
+      
+      echo "File size: ", fileSize, " bytes (", formatFloat(fileSize.float / 1024.0 / 1024.0, ffDecimal, 2), " MB)"
+      return (status, fileSize)
+    
+    raise newException(IOError, "Invalid response format: not enough arguments returned")
+  
+  raise newException(IOError, "Failed to get file size")
