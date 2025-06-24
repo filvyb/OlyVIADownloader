@@ -813,11 +813,16 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo sqlQuery46Res.results
 
     # TODO: Implement DB communication
-    #3969
-    let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
-    let databaseGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
-    let fileListResult = await getFileList(client, serverUrl, databaseGuid)
     
+    let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
+    let databaseImageGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
+    #3954
+    let isImageValid = await isImageValid(client, databaseImageGuid, serverUrl)
+    if not isImageValid:
+      echo "Invalid image GUID: ", databaseImageGuid
+    #3969
+    let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
+
     # TODO: Implement file download
     
   except Exception as e:
