@@ -310,3 +310,255 @@ proc getFileSize*(client: NrtpTcpClient, serverGUID: string, entryGUID: string,
     raise newException(IOError, "Invalid response format: not enough arguments returned")
   
   raise newException(IOError, "Failed to get file size")
+
+proc closeFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string, 
+                fileName: string): Future[int32] {.async.} =
+  ## Closes a file on the remote file server
+  ## Parameters:
+  ##   serverGUID - The server GUID
+  ##   databaseGUID - The database GUID
+  ##   fileName - The name of the file to close
+  ## Returns the status code (0 for success)
+  
+  # Set the path to the RemoteFileServer object
+  client.setPath("RemotingWrapper.RemoteFileServer")
+
+  # Create serialization context
+  let ctx = newSerializationContext()
+  
+  # Create method call with ArgsInline flag
+  var flags: MessageFlags = {MessageFlag.ArgsInline, MessageFlag.NoContext}
+  
+  let fullTypeName = "RemotingWrapper.RemoteFileServer, RemotingWrapper, Version=1.1.0.0, Culture=neutral, PublicKeyToken=null"
+  
+  var call = BinaryMethodCall(
+    recordType: rtMethodCall,
+    messageEnum: flags,
+    methodName: newStringValueWithCode("Close"),
+    typeName: newStringValueWithCode(fullTypeName)
+  )
+  
+  # Create the three string arguments
+  var args: seq[ValueWithCode] = @[]
+  args.add(toValueWithCode(stringValue(serverGUID)))     # Server GUID
+  args.add(toValueWithCode(stringValue(databaseGUID)))  # Database GUID
+  args.add(toValueWithCode(stringValue(fileName)))      # File name
+  
+  call.args = args
+  
+  # Create the message
+  let msg = newRemotingMessage(ctx, methodCall = some(call))
+  
+  # Serialize and send
+  let requestData = serializeRemotingMessage(msg, ctx)
+  
+  echo "Closing file on server..."
+  echo "  Server GUID: ", serverGUID
+  echo "  Database GUID: ", databaseGUID
+  echo "  File Name: ", fileName
+  
+  let responseData = await client.invoke("Close", fullTypeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let responseMsg = readRemotingMessage(input)
+  
+  if responseMsg.methodReturn.isSome:
+    let ret = responseMsg.methodReturn.get
+    
+    # Extract the return status
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      let status = ret.returnValue.value.int32Val
+      if status == 0:
+        echo "File closed successfully"
+      else:
+        echo "Failed to close file with status code: ", status
+      return status
+  
+  raise newException(IOError, "Failed to close file")
+
+proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string, 
+               fileName: string, filePos: int64, count: uint32): 
+               Future[tuple[status: int32, data: seq[byte]]] {.async.} =
+  ## Reads a chunk of data from a file on the remote file server
+  ## Parameters:
+  ##   serverGUID - The server GUID
+  ##   databaseGUID - The database GUID
+  ##   fileName - The name of the file to read from
+  ##   filePos - The position in the file to start reading from
+  ##   count - The number of bytes to read
+  ## Returns a tuple with:
+  ##   status - Status code (0 for success)
+  ##   data - The bytes read from the file
+  
+  # Set the path to the RemoteFileServer object
+  client.setPath("RemotingWrapper.RemoteFileServer")
+
+  # Create method call with the required parameters
+  let typeName = "RemotingWrapper.RemoteFileServer, RemotingWrapper"
+  
+  # Create arguments: serverGUID, databaseGUID, fileName, null for ref pData, filePos, count
+  let args = @[
+    stringValue(serverGUID),     # Server GUID parameter
+    stringValue(databaseGUID),   # Database GUID parameter
+    stringValue(fileName),       # File name parameter
+    PrimitiveValue(kind: ptNull), # Placeholder for ref byte[] pData parameter
+    int64Value(filePos),         # nFilePos parameter
+    uint32Value(count)           # nCount parameter
+  ]
+  
+  # Create request
+  let requestData = createMethodCallRequest(
+    methodName = "Read",
+    typeName = typeName,
+    args = args
+  )
+  
+  echo "Reading file data..."
+  echo "  Server GUID: ", serverGUID
+  echo "  Database GUID: ", databaseGUID
+  echo "  File Name: ", fileName
+  echo "  Position: ", filePos
+  echo "  Bytes to read: ", count
+  
+  let responseData = await client.invoke("Read", typeName, false, requestData)
+  
+  # Parse response
+  var input = memoryInput(responseData)
+  let msg = readRemotingMessage(input)
+  
+  if msg.methodReturn.isSome:
+    let ret = msg.methodReturn.get
+    
+    # Check if we have a return value (status code)
+    var status: int32 = -1
+    if MessageFlag.ReturnValueInline in ret.messageEnum and 
+       ret.returnValue.primitiveType == ptInt32:
+      status = ret.returnValue.value.int32Val
+      if status != 0:
+        echo "Read failed with status code: ", status
+        return (status, @[])
+    
+    # The response should have the byte array in the arguments
+    # Based on the method signature, the byte array should be the 4th argument (index 3)
+    if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 4:
+      # The first three parameters are returned as null (unchanged input values)
+      # The fourth parameter should be the byte array data
+      
+      # However, more likely the data is in the methodCallArray as a reference
+      if MessageFlag.ArgsInArray in ret.messageEnum:
+        # Data is in the array
+        if msg.methodCallArray.len >= 4:
+          let dataRef = msg.methodCallArray[3]
+          if dataRef.kind == rvReference:
+            # Find the referenced byte array in the records
+            for record in msg.referencedRecords:
+              if record.kind == rvArray:
+                let arrayRecord = record.arrayVal.record
+                if arrayRecord.kind == rtArraySinglePrimitive:
+                  let arrayPrim = arrayRecord.arraySinglePrimitive
+                  if arrayPrim.primitiveType == ptByte and arrayPrim.arrayInfo.objectId == dataRef.idRef:
+                    var data: seq[byte] = @[]
+                    for elem in record.arrayVal.elements:
+                      if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+                        data.add(elem.primitiveVal.byteVal)
+                    
+                    echo "Successfully read ", data.len, " bytes"
+                    return (status, data)
+    else:
+      # Check if data is in referenced records directly
+      for record in msg.referencedRecords:
+        if record.kind == rvArray:
+          let arrayRecord = record.arrayVal.record
+          if arrayRecord.kind == rtArraySinglePrimitive:
+            let arrayPrim = arrayRecord.arraySinglePrimitive
+            if arrayPrim.primitiveType == ptByte:
+              var data: seq[byte] = @[]
+              for elem in record.arrayVal.elements:
+                if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+                  data.add(elem.primitiveVal.byteVal)
+              
+              echo "Successfully read ", data.len, " bytes"
+              return (status, data)
+    
+    echo "Warning: Could not find byte array data in response, but status was success"
+    return (status, @[])
+  
+  raise newException(IOError, "Failed to read file data")
+
+
+proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
+                   fileName: string, outputPath: string, chunkSize: uint32 = 131072'u32): Future[bool] {.async.} =
+  ## Downloads a complete file from the remote file server
+  ## Parameters:
+  ##   serverGUID - The server GUID
+  ##   databaseGUID - The database GUID
+  ##   fileName - The name of the file to download
+  ##   outputPath - The local path where the file should be saved
+  ##   chunkSize - The size of chunks to read (default: 128KB)
+  ## Returns true if successful, false otherwise
+  
+  echo "Downloading file: ", fileName, " to ", outputPath
+  
+  # First, get the file size
+  let fileSizeResult = await getFileSize(client, serverGUID, databaseGUID, fileName)
+  if fileSizeResult.status != 0:
+    echo "Failed to get file size"
+    return false
+  
+  let totalSize = fileSizeResult.fileSize
+  echo "Total file size: ", totalSize, " bytes"
+  
+  # Open the file
+  let openStatus = await openFile(client, serverGUID, databaseGUID, fileName)
+  if openStatus != 0:
+    echo "Failed to open file"
+    return false
+  
+  # Create/open the output file
+  var outputFile: File
+  if not open(outputFile, outputPath, fmWrite):
+    echo "Failed to create output file: ", outputPath
+    discard await closeFile(client, serverGUID, databaseGUID, fileName)
+    return false
+  
+  try:
+    var position: int64 = 0
+    var totalRead: int64 = 0
+    
+    # Read the file in chunks
+    while position < totalSize:
+      let remainingBytes = totalSize - position
+      let bytesToRead = if remainingBytes > chunkSize.int64: chunkSize else: remainingBytes.uint32
+      
+      let readResult = await readFile(client, serverGUID, databaseGUID, fileName, position, bytesToRead)
+      if readResult.status != 0:
+        echo "Failed to read file at position ", position
+        return false
+      
+      # Write the chunk to the output file
+      if readResult.data.len > 0:
+        discard outputFile.writeBuffer(readResult.data[0].unsafeAddr, readResult.data.len)
+        totalRead += readResult.data.len
+        position += readResult.data.len
+        
+        # Show progress
+        let progress = (totalRead.float / totalSize.float) * 100.0
+        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%")
+        stdout.flushFile()
+      else:
+        echo "\nWarning: Read returned 0 bytes at position ", position
+        break
+    
+    echo "\nDownload complete: ", totalRead, " bytes"
+    
+  finally:
+    outputFile.close()
+    
+    # Close the file on the server
+    let closeStatus = await closeFile(client, serverGUID, databaseGUID, fileName)
+    if closeStatus != 0:
+      echo "Warning: Failed to close file on server"
+  
+  return true
