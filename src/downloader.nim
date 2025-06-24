@@ -824,7 +824,14 @@ proc downloader*(address: string, port: int, username, password, database, direc
     let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
     for file in fileListResult.fileNames:
       echo "File: ", file
-      let fileStat = await downloadFile(client, serverUrl, databaseImageGuid, file, directory)
+      var filePath = directory
+      if file.contains("\\"):
+        var parts = file.split("\\")
+        for part in parts:
+          filePath = filePath / part
+      else:
+        filePath = filePath / file
+      let fileStat = await downloadFile(client, serverUrl, databaseImageGuid, file, filePath)
       if fileStat:
         echo "File downloaded successfully: ", file
       else:

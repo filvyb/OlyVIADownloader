@@ -1,6 +1,7 @@
 import faststreams/inputs
 import asyncdispatch
 import strutils, options
+import os
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums, context]
@@ -516,6 +517,17 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
     echo "Failed to open file"
     return false
   
+  # Create the directory path if it doesn't exist
+  let outputDir = outputPath.parentDir()
+  if outputDir != "" and not dirExists(outputDir):
+    try:
+      createDir(outputDir)
+      echo "Created directory: ", outputDir
+    except OSError as e:
+      echo "Failed to create directory: ", outputDir, " - ", e.msg
+      discard await closeFile(client, serverGUID, databaseGUID, fileName)
+      return false
+  
   # Create/open the output file
   var outputFile: File
   if not open(outputFile, outputPath, fmWrite):
@@ -545,7 +557,7 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
         
         # Show progress
         let progress = (totalRead.float / totalSize.float) * 100.0
-        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%")
+        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%", "\n")
         stdout.flushFile()
       else:
         echo "\nWarning: Read returned 0 bytes at position ", position
