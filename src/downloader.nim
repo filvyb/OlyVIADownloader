@@ -873,7 +873,8 @@ proc downloader*(address: string, port: int, username, password, database, direc
     let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
     let imageGuids = if imageEntries.hasKey("GUID"): imageEntries["GUID"] else: raise newException(ValueError, "GUID not found in image entries")
     for databaseImageGuid in imageGuids:
-      echo "Image GUID: ", databaseImageGuid.strip()
+      let databaseImageGuid = databaseImageGuid.strip()
+      echo "Image GUID: ", databaseImageGuid
       #let databaseImageGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
       #3954
       let isImageValid = await isImageValid(client, databaseImageGuid, serverUrl)

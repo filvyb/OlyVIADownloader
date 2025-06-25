@@ -502,7 +502,13 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
   
   echo "Downloading file: ", fileName, " to ", outputPath
   
-  # First, get the file size
+  # First, open the file
+  let openStatus = await openFile(client, serverGUID, databaseGUID, fileName)
+  if openStatus != 0:
+    echo "Failed to open file"
+    return false
+
+  # Get the file size
   let fileSizeResult = await getFileSize(client, serverGUID, databaseGUID, fileName)
   if fileSizeResult.status != 0:
     echo "Failed to get file size"
@@ -510,12 +516,6 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
   
   let totalSize = fileSizeResult.fileSize
   echo "Total file size: ", totalSize, " bytes"
-  
-  # Open the file
-  let openStatus = await openFile(client, serverGUID, databaseGUID, fileName)
-  if openStatus != 0:
-    echo "Failed to open file"
-    return false
   
   # Create the directory path if it doesn't exist
   let outputDir = outputPath.parentDir()
