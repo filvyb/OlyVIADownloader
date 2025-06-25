@@ -782,18 +782,14 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery45, " (status code: ", sqlQuery45Res.status, ")"
       return
     echo sqlQuery45Res.results
-
-    # 3934
-    let sqlQuery46 = """SELECT tb_SubDocuments_IOType_5.[ID], 
-                                       tb_SubDocuments_IOType_5.[attRecID], 
-                                       tb_SubDocuments_IOType_5.[id_NetImgServer], 
-                                       tb_SubDocuments_IOType_5.[VolumeGUID], 
-                                       tb_SubDocuments_IOType_5.[GUID], 
-                                       tb_SubDocuments_IOType_5.[RelativePath], 
-                                       tb_SubDocuments_IOType_5.[FileName], 
-                                       tb_SubDocuments_IOType_5.[FileSize], 
-                                       tb_SubDocuments_IOType_5.[EntryType] 
-                                FROM [dbo].[tb_SubDocuments_IOType_5] 
+    #3901
+    let sqlQuery46 = """SELECT tb_DocumentIOType_5.[attRecID], 
+                                       tb_DocumentIOType_5.[id_NetImgServer], 
+                                       tb_DocumentIOType_5.[VolumeGUID], 
+                                       tb_DocumentIOType_5.[GUID], 
+                                       tb_DocumentIOType_5.[FileName], 
+                                       tb_DocumentIOType_5.[EntryType] 
+                                FROM [dbo].[tb_DocumentIOType_5] 
                                 WHERE [attRecID] = :B0"""
     let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 5384"
     let paramsIn46 = boostBinToZip(boostText46)
@@ -812,6 +808,35 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery46Res.results
 
+    # 3934
+    #[ let sqlQuery47 = """SELECT tb_SubDocuments_IOType_5.[ID], 
+                                       tb_SubDocuments_IOType_5.[attRecID], 
+                                       tb_SubDocuments_IOType_5.[id_NetImgServer], 
+                                       tb_SubDocuments_IOType_5.[VolumeGUID], 
+                                       tb_SubDocuments_IOType_5.[GUID], 
+                                       tb_SubDocuments_IOType_5.[RelativePath], 
+                                       tb_SubDocuments_IOType_5.[FileName], 
+                                       tb_SubDocuments_IOType_5.[FileSize], 
+                                       tb_SubDocuments_IOType_5.[EntryType] 
+                                FROM [dbo].[tb_SubDocuments_IOType_5] 
+                                WHERE [attRecID] = :B0"""
+    let boostText47 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 5384"
+    let paramsIn47 = boostBinToZip(boostText47)
+    let sqlQuery47Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery47],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[49],  # Use fortieth query result object
+      paramsIn47            # Input parameters in zipped boost format
+    )
+    if sqlQuery47Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery47, " (status code: ", sqlQuery47Res.status, ")"
+      return
+    echo sqlQuery47Res.results ]#
+
     # TODO: Implement DB communication
     
     let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
@@ -824,6 +849,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
     for file in fileListResult.fileNames:
       echo "File: ", file
+      continue # skip downloading files for now
       var filePath = directory
       if file.contains("\\"):
         var parts = file.split("\\")
