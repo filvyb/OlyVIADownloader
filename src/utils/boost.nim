@@ -165,3 +165,43 @@ proc `$`*(table: Table[string, seq[string]]): string =
   lines.add("└" & widths.mapIt("─".repeat(it)).join("┴") & "┘")
   
   return lines.join("\n")
+
+proc tableToCsv*(data: Table[string, seq[string]], filename: string) =
+  ## Converts a table with string keys (column names) and seq[string] values (rows) to CSV
+  
+  if data.len == 0:
+    writeFile(filename, "")
+    return
+  
+  # Get column names (keys)
+  var columns: seq[string] = @[]
+  for key in data.keys:
+    columns.add(key)
+  
+  # Determine the maximum number of rows
+  var maxRows = 0
+  for values in data.values:
+    maxRows = max(maxRows, values.len)
+  
+  # Open file for writing
+  var csvContent = ""
+  
+  # Write header (column names)
+  csvContent.add(columns.join(",") & "\n")
+  
+  # Write data rows
+  for rowIndex in 0..<maxRows:
+    var row: seq[string] = @[]
+    for col in columns:
+      if rowIndex < data[col].len:
+        # Escape quotes and wrap in quotes if contains comma or quote
+        var cell = data[col][rowIndex]
+        if "," in cell or "\"" in cell or "\n" in cell:
+          cell = "\"" & cell.replace("\"", "\"\"") & "\""
+        row.add(cell)
+      else:
+        row.add("")  # Empty cell if this column has fewer rows
+    csvContent.add(row.join(",") & "\n")
+  
+  # Write to file
+  writeFile(filename, csvContent)

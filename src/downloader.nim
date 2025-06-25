@@ -6,7 +6,7 @@ import utils/[boost, zip]
 
 import DotNimRemoting/tcp/client
 
-proc downloader*(address: string, port: int, username, password, database, directory, file: string) {.async.} =
+proc downloader*(address: string, port: int, username, password, database, directory: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
   echo "Port: ", port
@@ -14,7 +14,6 @@ proc downloader*(address: string, port: int, username, password, database, direc
   echo "Password: ", password
   echo "Database: ", database
   echo "Directory: ", directory
-  echo "File: ", file
   
   # Create directory if it doesn't exist
   if not dirExists(directory):
@@ -558,7 +557,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery22Res.results
 
-    let boostText23 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 1 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    #[ let boostText23 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 1 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
     let paramsIn23 = boostBinToZip(boostText23)
     let sqlQuery23Res = await executeSql(
       client, 
@@ -573,9 +572,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery23Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery23Res.status, ")"
       return
-    echo toSeq(keys(sqlQuery23Res.results))
+    echo toSeq(keys(sqlQuery23Res.results)) ]#
 
-    let boostText24 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 2 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    #[ let boostText24 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 2 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
     let paramsIn24 = boostBinToZip(boostText24)
     let sqlQuery24Res = await executeSql(
       client, 
@@ -590,7 +589,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery24Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery24Res.status, ")"
       return
-    echo toSeq(keys(sqlQuery24Res.results))
+    echo toSeq(keys(sqlQuery24Res.results)) ]#
 
     let sqlQuery25 = "SELECT vw_Constraints.[RecTypeMain], vw_Constraints.[RecTypeChild], vw_Constraints.[AcceptAsChild], vw_Constraints.[VisibleAsChild], vw_Constraints.[SearchableAsChild] FROM [dbo].[vw_Constraints] ORDER BY [RecTypeMain] asc"
     let sqlQuery25Res = await executeSql(
@@ -765,7 +764,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery44Res.results
 
-    let sqlQuery45 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE ((t1.[attRecRecordTypeID] =  :B1)OR (t1.[attRecRecordTypeID] =  :B0))"
+    #[ let sqlQuery45 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE ((t1.[attRecRecordTypeID] =  :B1)OR (t1.[attRecRecordTypeID] =  :B0))"
     let boostText45 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 2 1 0 1 5 1 13 1 -99 -1 2 B1 1 2 1 0 1 5 1 6"
     let paramsIn45 = boostBinToZip(boostText45)
     let sqlQuery45Res = await executeSql(
@@ -781,11 +780,12 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery45Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery45, " (status code: ", sqlQuery45Res.status, ")"
       return
-    echo sqlQuery45Res.results
+    echo sqlQuery45Res.results ]#
 
     #2349
-    let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
-    #let sqlQuery46 = "SELECT * FROM [dbo].[vw_AttributeTable_1]"
+    #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
+    let sqlQuery46 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg' AND (t1.[attPreviousRecordID] IS NOT NULL OR t1.[attPreviousRecordID] != '')"
+    #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg'"
     let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
     let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
@@ -796,13 +796,14 @@ proc downloader*(address: string, port: int, username, password, database, direc
       1,                  # SqlCommandType
       1,                 # SqlCommandSubType  
       queryResultIds[49],  # Use fortieth query result object
-      paramsIn46            # Input parameters in zipped boost format
+      paramsIn1            # Input parameters in zipped boost format
     )
     if sqlQuery46Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
       return
     echo sqlQuery46Res.results
-    #raise newException(ValueError, "attRecID not found in results")  # This is a placeholder, will be replaced with actual logic
+    #tableToCsv(sqlQuery46Res.results, "attribute_table_1.csv")
+    
     var imageEntries = initTable[string, seq[string]]()
     if not sqlQuery46Res.results.hasKey("attRecID"):
       raise newException(ValueError, "attRecID not found in results")
@@ -839,6 +840,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
         imageEntries[key].add(value)
 
     echo "Image entries:\n", imageEntries
+    #raise newException(ValueError, "Image entries processing not implemented yet")
     # 3934
     #[ let sqlQuery47 = """SELECT tb_SubDocuments_IOType_5.[ID], 
                                        tb_SubDocuments_IOType_5.[attRecID], 
@@ -884,7 +886,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
       for file in fileListResult.fileNames:
         echo "File: ", file
-        #continue # skip downloading files for now
+        continue # skip downloading files for now
         var filePath = directory
         if file.contains("\\"):
           var parts = file.split("\\")
