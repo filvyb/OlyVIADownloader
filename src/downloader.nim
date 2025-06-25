@@ -785,6 +785,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     #2349
     let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
+    #let sqlQuery46 = "SELECT * FROM [dbo].[vw_AttributeTable_1]"
     let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
     let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
@@ -801,33 +802,43 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
       return
     echo sqlQuery46Res.results
-    #3901
-    let sqlQuery47 = """SELECT tb_DocumentIOType_5.[attRecID], 
-                                       tb_DocumentIOType_5.[id_NetImgServer], 
-                                       tb_DocumentIOType_5.[VolumeGUID], 
-                                       tb_DocumentIOType_5.[GUID], 
-                                       tb_DocumentIOType_5.[FileName], 
-                                       tb_DocumentIOType_5.[EntryType] 
-                                FROM [dbo].[tb_DocumentIOType_5] 
-                                WHERE [attRecID] = :B0"""
-    let attRecID = 5384
-    let boostText47 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 " & $attRecID
-    let paramsIn47 = boostBinToZip(boostText47)
-    let sqlQuery47Res = await executeSql(
-      client, 
-      sessionId, 
-      connectionId,
-      @[sqlQuery47],        # SQL commands array
-      1,                  # SqlCommandType
-      1,                 # SqlCommandSubType  
-      queryResultIds[50],  # Use forty-first query result object
-      paramsIn47            # Input parameters in zipped boost format
-    )
-    if sqlQuery47Res.status != 0:
-      echo "Failed to execute SQL query: ", sqlQuery47, " (status code: ", sqlQuery47Res.status, ")"
-      return
-    echo sqlQuery47Res.results
+    #raise newException(ValueError, "attRecID not found in results")  # This is a placeholder, will be replaced with actual logic
+    var imageEntries = initTable[string, seq[string]]()
+    if not sqlQuery46Res.results.hasKey("attRecID"):
+      raise newException(ValueError, "attRecID not found in results")
+    for attRecID in sqlQuery46Res.results["attRecID"]:
+      #3901
+      let sqlQuery47 = """SELECT tb_DocumentIOType_5.[attRecID], 
+                                        tb_DocumentIOType_5.[id_NetImgServer], 
+                                        tb_DocumentIOType_5.[VolumeGUID], 
+                                        tb_DocumentIOType_5.[GUID], 
+                                        tb_DocumentIOType_5.[FileName], 
+                                        tb_DocumentIOType_5.[EntryType] 
+                                  FROM [dbo].[tb_DocumentIOType_5] 
+                                  WHERE [attRecID] = :B0"""
+      #let attRecID = 5384
+      let boostText47 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 " & $attRecID.strip()
+      let paramsIn47 = boostBinToZip(boostText47)
+      let sqlQuery47Res = await executeSql(
+        client, 
+        sessionId, 
+        connectionId,
+        @[sqlQuery47],        # SQL commands array
+        1,                  # SqlCommandType
+        1,                 # SqlCommandSubType  
+        queryResultIds[50],  # Use forty-first query result object
+        paramsIn47            # Input parameters in zipped boost format
+      )
+      if sqlQuery47Res.status != 0:
+        echo "Failed to execute SQL query: ", sqlQuery47, " (status code: ", sqlQuery47Res.status, ")"
+        return
+      #echo sqlQuery47Res.results
+      for key, value in sqlQuery47Res.results: # not as performant but avoids nested loops
+        if not imageEntries.hasKey(key):
+          imageEntries[key] = @[]
+        imageEntries[key].add(value)
 
+    echo "Image entries:\n", imageEntries
     # 3934
     #[ let sqlQuery47 = """SELECT tb_SubDocuments_IOType_5.[ID], 
                                        tb_SubDocuments_IOType_5.[attRecID], 
@@ -858,30 +869,33 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo sqlQuery47Res.results ]#
 
     # TODO: Implement DB communication
-    
+
     let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
-    let databaseImageGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
-    #3954
-    let isImageValid = await isImageValid(client, databaseImageGuid, serverUrl)
-    if not isImageValid:
-      echo "Invalid image GUID: ", databaseImageGuid
-    #3969
-    let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
-    for file in fileListResult.fileNames:
-      echo "File: ", file
-      continue # skip downloading files for now
-      var filePath = directory
-      if file.contains("\\"):
-        var parts = file.split("\\")
-        for part in parts:
-          filePath = filePath / part
-      else:
-        filePath = filePath / file
-      let fileStat = await downloadFile(client, serverUrl, databaseImageGuid, file, filePath)
-      if fileStat:
-        echo "File downloaded successfully: ", file
-      else:
-        echo "Failed to download file: ", file
+    let imageGuids = if imageEntries.hasKey("GUID"): imageEntries["GUID"] else: raise newException(ValueError, "GUID not found in image entries")
+    for databaseImageGuid in imageGuids:
+      echo "Image GUID: ", databaseImageGuid.strip()
+      #let databaseImageGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
+      #3954
+      let isImageValid = await isImageValid(client, databaseImageGuid, serverUrl)
+      if not isImageValid:
+        echo "Invalid image GUID: ", databaseImageGuid
+      #3969
+      let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
+      for file in fileListResult.fileNames:
+        echo "File: ", file
+        #continue # skip downloading files for now
+        var filePath = directory
+        if file.contains("\\"):
+          var parts = file.split("\\")
+          for part in parts:
+            filePath = filePath / part
+        else:
+          filePath = filePath / file
+        let fileStat = await downloadFile(client, serverUrl, databaseImageGuid, file, filePath)
+        if fileStat:
+          echo "File downloaded successfully: ", file
+        else:
+          echo "Failed to download file: ", file
 
 
     # TODO: Implement file download
