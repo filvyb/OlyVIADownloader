@@ -782,16 +782,10 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery45, " (status code: ", sqlQuery45Res.status, ")"
       return
     echo sqlQuery45Res.results
-    #3901
-    let sqlQuery46 = """SELECT tb_DocumentIOType_5.[attRecID], 
-                                       tb_DocumentIOType_5.[id_NetImgServer], 
-                                       tb_DocumentIOType_5.[VolumeGUID], 
-                                       tb_DocumentIOType_5.[GUID], 
-                                       tb_DocumentIOType_5.[FileName], 
-                                       tb_DocumentIOType_5.[EntryType] 
-                                FROM [dbo].[tb_DocumentIOType_5] 
-                                WHERE [attRecID] = :B0"""
-    let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 5384"
+
+    #2349
+    let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
+    let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
     let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
       client, 
@@ -807,6 +801,32 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
       return
     echo sqlQuery46Res.results
+    #3901
+    let sqlQuery47 = """SELECT tb_DocumentIOType_5.[attRecID], 
+                                       tb_DocumentIOType_5.[id_NetImgServer], 
+                                       tb_DocumentIOType_5.[VolumeGUID], 
+                                       tb_DocumentIOType_5.[GUID], 
+                                       tb_DocumentIOType_5.[FileName], 
+                                       tb_DocumentIOType_5.[EntryType] 
+                                FROM [dbo].[tb_DocumentIOType_5] 
+                                WHERE [attRecID] = :B0"""
+    let attRecID = 5384
+    let boostText47 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 " & $attRecID
+    let paramsIn47 = boostBinToZip(boostText47)
+    let sqlQuery47Res = await executeSql(
+      client, 
+      sessionId, 
+      connectionId,
+      @[sqlQuery47],        # SQL commands array
+      1,                  # SqlCommandType
+      1,                 # SqlCommandSubType  
+      queryResultIds[50],  # Use forty-first query result object
+      paramsIn47            # Input parameters in zipped boost format
+    )
+    if sqlQuery47Res.status != 0:
+      echo "Failed to execute SQL query: ", sqlQuery47, " (status code: ", sqlQuery47Res.status, ")"
+      return
+    echo sqlQuery47Res.results
 
     # 3934
     #[ let sqlQuery47 = """SELECT tb_SubDocuments_IOType_5.[ID], 
