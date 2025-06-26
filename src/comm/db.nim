@@ -253,7 +253,6 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
             break
 
     if queueFound:
-      # Extract the queue members
       let queueMembers = queueObj.classVal.members
       if queueMembers.len >= 4:  # Ensure we have all members
         let sizeVal = queueMembers[3]  # _size member
@@ -269,10 +268,8 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
             if record.kind == rvArray:
               let arrayRecord = record.arrayVal.record
               if arrayRecord.kind == rtArraySingleObject:
-                # This should be the Queue's internal array
                 let elements = record.arrayVal.elements
                 
-                # Extract the IDs (up to actualCount)
                 for i in 0..<min(actualCount, elements.len.int32):
                   let elem = elements[i]
                   if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptInt32:
@@ -335,8 +332,6 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
   var paramsInRefId: int32 = 0
   
   if paramsIn.len > 0:
-    # Create an ArraySinglePrimitive of bytes to hold the binary data
-    # Convert bytes to primitive values
     let byteElements = paramsIn.mapIt(RemotingValue(
       kind: rvPrimitive, 
       primitiveVal: byteValue(it)
@@ -425,7 +420,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
         echo "Execute failed with status code: ", status
         return (status, @[], initTable[string, seq[string]]())
     
-    # The response structure based on packet analysis:
+    # Structure:
     # 1. BinaryMethodReturn with status code (0 = success)
     # 2. ArraySingleObject with 9 items (matching Execute's 9 parameters):
     #    - Items 0-5: null values (Client, Connection, SqlCommandTexts, SqlCommandType, SqlCommandSubType, QueryResult)
@@ -467,14 +462,12 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
           # Check if this is one of our arrays by matching the expected IDs
           # Note: The objectId is set during deserialization
           if arrayPrim.arrayInfo.objectId == paramsOutRef:
-            # Extract ParamsOut bytes
             for elem in record.arrayVal.elements:
               if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
                 paramsOutBytes.add(elem.primitiveVal.byteVal)
             echo "Extracted ParamsOut: ", paramsOutBytes.len, " bytes"
             
           elif arrayPrim.arrayInfo.objectId == resultsRef:
-            # Extract Results bytes
             for elem in record.arrayVal.elements:
               if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
                 resultsBytes.add(elem.primitiveVal.byteVal)

@@ -17,7 +17,6 @@ proc testConnection*(client: NrtpTcpClient): Future[bool] {.async.} =
   echo "Testing connection to server..."
   let responseData = await client.invoke("Test", typeName, false, requestData)
   
-  # Parse response
   var input = memoryInput(responseData)
   let msg = readRemotingMessage(input)
   
@@ -47,7 +46,6 @@ proc createSession*(client: NrtpTcpClient): Future[int32] {.async.} =
   echo "Creating session..."
   let responseData = await client.invoke("Create", typeName, false, requestData)
   
-  # Parse response
   var input = memoryInput(responseData)
   let msg = readRemotingMessage(input)
   
@@ -97,15 +95,12 @@ proc getInterfaceVersion*(client: NrtpTcpClient, interfaceId: uint32): Future[tu
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
     
-    # Check if we have a return value
     if MessageFlag.ReturnValueInline in ret.messageEnum:
       let returnCode = ret.returnValue.value.int32Val
       if returnCode != 0:
         raise newException(IOError, "GetInterfaceVersion failed with code: " & $returnCode)
     
-    # Check if we have arguments in the response
     if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 3:
-      # Extract version components from output arguments
       let major = ret.args[1].value.int32Val
       let minor = ret.args[2].value.int32Val 
       let micro = ret.args[3].value.int32Val
@@ -236,14 +231,12 @@ proc disconnect*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): 
   echo "Disconnecting session ID: ", sessionId, ", connection ID: ", connectionId
   let responseData = await client.invoke("Disconnect", typeName, false, requestData)
   
-  # Parse response
   var input = memoryInput(responseData)
   let msg = readRemotingMessage(input)
   
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
     
-    # Check if we have a return value
     if MessageFlag.ReturnValueInline in ret.messageEnum and 
        ret.returnValue.primitiveType == ptInt32:
       let statusCode = ret.returnValue.value.int32Val
@@ -292,7 +285,6 @@ proc destroyConnectionObject*(client: NrtpTcpClient, sessionId: int32, connectio
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
     
-    # Check if we have a return value
     if MessageFlag.ReturnValueInline in ret.messageEnum and 
        ret.returnValue.primitiveType == ptInt32:
       let statusCode = ret.returnValue.value.int32Val

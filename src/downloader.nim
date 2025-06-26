@@ -449,7 +449,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery17, " (status code: ", sqlQuery17Res.status, ")"
       return
 
-    echo sqlQuery17Res.results # there's only one lol
+    #echo sqlQuery17Res.results # there's only one lol
 
     let sqlQuery18 = "set language us_english"
     let sqlQuery18Res = await executeSql(
@@ -762,7 +762,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery44Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery44, " (status code: ", sqlQuery44Res.status, ")"
       return
-    echo sqlQuery44Res.results
+    #echo sqlQuery44Res.results
 
     #[ let sqlQuery45 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE ((t1.[attRecRecordTypeID] =  :B1)OR (t1.[attRecRecordTypeID] =  :B0))"
     let boostText45 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 2 1 0 1 5 1 13 1 -99 -1 2 B1 1 2 1 0 1 5 1 6"
@@ -786,7 +786,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
     #let sqlQuery46 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg' AND (t1.[attPreviousRecordID] IS NOT NULL OR t1.[attPreviousRecordID] != '')"
     #let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID], t1.[attRecName], t1.[attRecParentID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpFolder' OR t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
-    let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
+    let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
     let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
     let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
@@ -804,7 +804,6 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     #echo sqlQuery46Res.results
     #tableToCsv(sqlQuery46Res.results, "attribute_table_1.csv")
-    #raise newException(ValueError, "Attribute table processing not implemented yet")
     
     var imageEntries = initTable[string, seq[string]]()
     if not sqlQuery46Res.results.hasKey("attRecID"):
@@ -841,7 +840,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
           imageEntries[key] = @[]
         imageEntries[key].add(value)
 
-    echo "Image entries:\n", imageEntries
+    #echo "Image entries:\n", imageEntries
     #raise newException(ValueError, "Image entries processing not implemented yet")
     # 3934
     #[ let sqlQuery47 = """SELECT tb_SubDocuments_IOType_5.[ID], 
@@ -872,14 +871,11 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
     echo sqlQuery47Res.results ]#
 
-    # TODO: Implement DB communication
-
     let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
     let imageGuids = if imageEntries.hasKey("GUID"): imageEntries["GUID"] else: raise newException(ValueError, "GUID not found in image entries")
     for databaseImageGuid in imageGuids:
       let databaseImageGuid = databaseImageGuid.strip()
       echo "Image GUID: ", databaseImageGuid
-      #let databaseImageGuid = "005c190e-d3ef-4a99-bf73-a9eb01e9377e"
       #3954
       let isImageValid = await isImageValid(client, databaseImageGuid, serverUrl)
       if not isImageValid:
@@ -902,20 +898,16 @@ proc downloader*(address: string, port: int, username, password, database, direc
         else:
           echo "Failed to download file: ", file
 
-
-    # TODO: Implement file download
-    
   except Exception as e:
     echo "Error: ", e.msg
   finally:
-    # Gracefully disconnect if we have valid session and connection IDs
+    # Gracefully disconnect
     if sessionId != 0 and connectionId != 0:
       try:
         let disconnectStatus = await disconnect(client, sessionId, connectionId)
         if disconnectStatus != 0:
           echo "Warning: Disconnect returned non-zero status: ", disconnectStatus
           
-        # Destroy the connection object after disconnecting
         let destroyStatus = await destroyConnectionObject(client, sessionId, connectionId)
         if destroyStatus != 0:
           echo "Warning: DestroyConnectionObject returned non-zero status: ", destroyStatus

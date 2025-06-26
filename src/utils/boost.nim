@@ -56,24 +56,20 @@ proc extractValue(node: XmlNode): string =
   let valueNode = pValueNode.child("value")
   if valueNode == nil: return ""
   
-  # Check if there's a <text> child element first
   let textNode = valueNode.child("text")
   if textNode != nil:
     let textContent = textNode.innerText
     
-    # Check if the text content is XML by looking for XML declaration or root elements
     if textContent.contains("<?xml") or textContent.contains("&lt;?xml") or (textContent.contains("<") and textContent.contains(">")):
       # Try to parse as PropertySet XML and convert to JSON
       try:
         let jsonResult = parseFlagXml(textContent)
         return $jsonResult
       except:
-        # If parsing fails, return the original text
         return textContent
     else:
       return textContent
   else:
-    # Fall back to extracting the entire value content
     return valueNode.innerText
 
 proc parseBoostSqlXml*(xmlContent: string): SqlResultSet =

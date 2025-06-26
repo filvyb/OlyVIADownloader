@@ -300,8 +300,6 @@ proc getFileSize*(client: NrtpTcpClient, serverGUID: string, entryGUID: string,
     
     # Check if we have arguments in the response
     if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 4:
-      # Extract the reference parameter
-      # The first three parameters are returned as null (unchanged input values)
       # The fourth parameter is the output file size
       let fileSize = ret.args[3].value.int64Val
       
@@ -416,12 +414,12 @@ proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
     args = args
   )
   
-  echo "Reading file data..."
+  #[ echo "Reading file data..."
   echo "  Server GUID: ", serverGUID
   echo "  Database GUID: ", databaseGUID
   echo "  File Name: ", fileName
   echo "  Position: ", filePos
-  echo "  Bytes to read: ", count
+  echo "  Bytes to read: ", count ]#
   
   let responseData = await client.invoke("Read", typeName, false, requestData)
   
@@ -444,10 +442,8 @@ proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
     # The response should have the byte array in the arguments
     # Based on the method signature, the byte array should be the 4th argument (index 3)
     if MessageFlag.ArgsInline in ret.messageEnum and ret.args.len >= 4:
-      # The first three parameters are returned as null (unchanged input values)
       # The fourth parameter should be the byte array data
       
-      # However, more likely the data is in the methodCallArray as a reference
       if MessageFlag.ArgsInArray in ret.messageEnum:
         # Data is in the array
         if msg.methodCallArray.len >= 4:
@@ -465,7 +461,7 @@ proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
                       if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
                         data.add(elem.primitiveVal.byteVal)
                     
-                    echo "Successfully read ", data.len, " bytes"
+                    #echo "Successfully read ", data.len, " bytes"
                     return (status, data)
     else:
       # Check if data is in referenced records directly
@@ -480,7 +476,7 @@ proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
                 if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
                   data.add(elem.primitiveVal.byteVal)
               
-              echo "Successfully read ", data.len, " bytes"
+              #echo "Successfully read ", data.len, " bytes"
               return (status, data)
     
     echo "Warning: Could not find byte array data in response, but status was success"
@@ -490,7 +486,7 @@ proc readFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
 
 
 proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
-                   fileName: string, outputPath: string, chunkSize: uint32 = 131072'u32): Future[bool] {.async.} =
+                   fileName: string, outputPath: string, chunkSize: uint32 = 262144'u32): Future[bool] {.async.} =
   ## Downloads a complete file from the remote file server
   ## Parameters:
   ##   serverGUID - The server GUID
@@ -517,7 +513,6 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
   let totalSize = fileSizeResult.fileSize
   echo "Total file size: ", totalSize, " bytes"
   
-  # Create the directory path if it doesn't exist
   let outputDir = outputPath.parentDir()
   if outputDir != "" and not dirExists(outputDir):
     try:
@@ -539,32 +534,33 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
     var position: int64 = 0
     var totalRead: int64 = 0
     
-    # Read the file in chunks
     while position < totalSize:
       let remainingBytes = totalSize - position
       let bytesToRead = if remainingBytes > chunkSize.int64: chunkSize else: remainingBytes.uint32
       
       let readResult = await readFile(client, serverGUID, databaseGUID, fileName, position, bytesToRead)
       if readResult.status != 0:
-        echo "Failed to read file at position ", position
+        echo "\nFailed to read file at position ", position
         return false
       
-      # Write the chunk to the output file
       if readResult.data.len > 0:
         discard outputFile.writeBuffer(readResult.data[0].unsafeAddr, readResult.data.len)
         totalRead += readResult.data.len
         position += readResult.data.len
         
-        # Show progress
         let progress = (totalRead.float / totalSize.float) * 100.0
-        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%")
-        stdout.flushFile()
+        let shouldUpdate = (totalRead mod (1024 * 1024) < readResult.data.len) or
+                          ((progress * 10).int mod 1 == 0 and progress > (totalRead - readResult.data.len).float / totalSize.float * 100.0 * 10) or
+                          (totalRead == totalSize)
+        
+        if shouldUpdate or totalRead == totalSize:
+          stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "% (", 
+                      formatFloat(totalRead.float / 1024.0 / 1024.0, ffDecimal, 1), " MB / ",
+                      formatFloat(totalSize.float / 1024.0 / 1024.0, ffDecimal, 1), " MB)")
+          stdout.flushFile()
       else:
         echo "\nWarning: Read returned 0 bytes at position ", position
-        break
-    
-    echo "\nDownload complete: ", totalRead, " bytes"
-    
+
   finally:
     outputFile.close()
     
