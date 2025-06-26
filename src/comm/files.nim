@@ -557,7 +557,7 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
         
         # Show progress
         let progress = (totalRead.float / totalSize.float) * 100.0
-        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%", "\n")
+        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "%")
         stdout.flushFile()
       else:
         echo "\nWarning: Read returned 0 bytes at position ", position

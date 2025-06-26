@@ -1,5 +1,5 @@
 import asyncdispatch
-import strutils, os, tables, sequtils
+import strutils, os, tables
 
 import comm/[initial, db, files]
 import utils/[boost, zip]
@@ -97,7 +97,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery1, " (status code: ", sqlQuery1Res.status, ")"
       return
 
-    echo sqlQuery1Res.results
+    #echo sqlQuery1Res.results
 
     var maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[0])
 
@@ -118,7 +118,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery2, " (status code: ", sqlQuery2Res.status, ")"
       return
 
-    echo sqlQuery2Res.results
+    #echo sqlQuery2Res.results
 
     if not (await isConnected(client, sessionId, connectionId)):
       echo "Connection is not active, cannot proceed with query results"
@@ -141,7 +141,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery3, " (status code: ", sqlQuery3Res.status, ")"
       return
 
-    echo sqlQuery3Res.results
+    #echo sqlQuery3Res.results
 
     #maybe
     #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[2])
@@ -163,7 +163,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery4, " (status code: ", sqlQuery4Res.status, ")"
       return
 
-    echo sqlQuery4Res.results
+    #echo sqlQuery4Res.results
 
     #maybe
     #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[3])
@@ -196,7 +196,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery5, " (status code: ", sqlQuery5Res.status, ")"
       return
 
-    echo sqlQuery5Res.results
+    #echo sqlQuery5Res.results
 
     let sqlQuery6 = "[dbo].[sis_GetUserRightsMode]"
 
@@ -216,7 +216,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
 
     # is supposed to be empty, no idea why
-    echo sqlQuery6Res.results
+    #echo sqlQuery6Res.results
 
     let sqlQuery7 = "SELECT SUSER_SNAME() AS SNAME"
 
@@ -260,7 +260,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery8, " (status code: ", sqlQuery8Res.status, ")"
       return
 
-    echo sqlQuery8Res.results
+    #echo sqlQuery8Res.results
 
     let sqlQuery9 = "[dbo].[sis_GetDBAccess]"
     let boostText9 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 1 12 RETURN_VALUE 1 0 1 1"
@@ -281,7 +281,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery9, " (status code: ", sqlQuery9Res.status, ")"
       return
 
-    echo sqlQuery9Res.results
+    #echo sqlQuery9Res.results
 
     let sqlQuery10 = "[dbo].[sis_ur_GetActiveRole]"
 
@@ -322,7 +322,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery11, " (status code: ", sqlQuery11Res.status, ")"
       return
 
-    echo sqlQuery11Res.results
+    #echo sqlQuery11Res.results
     let userId = digUpBoostBin(sqlQuery11Res.paramsOut)
 
     let sqlQuery12 = "[dbo].[sis_OpenDatabaseChecks]"
@@ -343,7 +343,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery12, " (status code: ", sqlQuery12Res.status, ")"
       return
 
-    echo sqlQuery12Res.results
+    #echo sqlQuery12Res.results
 
     let sqlQuery13 = "[dbo].[sis_ReadDBParameter]"
     let boostText13 = "22 serialization::archive 4 0 0 4 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 11 szParameter 1 5 1 0 1 8192 1 0 0 1 14 DbSetupEdition 1 -98 1 7 szValue 1 0 1 1 1 -98 1 9 ret_Value 1 0 1"
@@ -363,7 +363,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery13, " (status code: ", sqlQuery13Res.status, ")"
       return
 
-    echo sqlQuery13Res.results
+    #echo sqlQuery13Res.results
 
     let sqlQuery14 = "SELECT CONVERT(INT, SERVERPROPERTY ('IsFullTextInstalled')) AS FULL_TEXT_PROP"
     let sqlQuery14Res = await executeSql(
@@ -381,7 +381,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery14, " (status code: ", sqlQuery14Res.status, ")"
       return
 
-    echo sqlQuery14Res.results
+    #echo sqlQuery14Res.results
 
     # maybe
     #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[13])
@@ -410,7 +410,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery15, " (status code: ", sqlQuery15Res.status, ")"
       return
 
-    echo sqlQuery15Res.results
+    #echo sqlQuery15Res.results
 
     let sqlQuery16 = """SELECT vw_AttributeHandlers.[ModuleName], vw_AttributeHandlers.[Version], vw_AttributeHandlers.[Position] 
                                 FROM [dbo].[vw_AttributeHandlers] 
@@ -430,7 +430,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery16, " (status code: ", sqlQuery16Res.status, ")"
       return
 
-    echo sqlQuery16Res.results
+    #echo sqlQuery16Res.results
 
     let sqlQuery17 = "SELECT vw_Languages.[id_Language], vw_Languages.[name_Language], vw_Languages.[is_DefaultLanguage] FROM [dbo].[vw_Languages]"
 
@@ -467,7 +467,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery18, " (status code: ", sqlQuery18Res.status, ")"
       return
 
-    echo sqlQuery18Res.results
+    #echo sqlQuery18Res.results
     # 601
     let sqlQuery19 = "[dbo].[sis_ReadDbObjects]"
     let langid = if sqlQuery17Res.results.hasKey("id_Language"): sqlQuery17Res.results["id_Language"][0].strip() else: raise newException(ValueError, "id_Language not found in results")
@@ -488,7 +488,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery19, " (status code: ", sqlQuery19Res.status, ")"
       return
 
-    echo sqlQuery19Res.results
+    #echo sqlQuery19Res.results
 
     # ReadDbObjects maybe thrice, not sure why
     let sqlQuery20 = "SELECT vw_Picklist.[RKey], vw_Picklist.[Datatype], vw_Picklist.[Flags], vw_Picklist.[GUID] FROM [dbo].[vw_Picklist]"
@@ -505,7 +505,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery20Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery20, " (status code: ", sqlQuery20Res.status, ")"
       return
-    echo sqlQuery20Res.results
+    #echo sqlQuery20Res.results
 
     # Loop through all RKey values from sqlQuery20
     let sqlQuery21 = "SELECT vw_PicklistValues.[Value] FROM [dbo].[vw_PicklistValues] WHERE [RKey] = :B0 ORDER BY [Position] asc"
@@ -536,7 +536,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
         echo "Failed to execute SQL query for RKey ", rkeyStripped, ": ", sqlQuery21, " (status code: ", sqlQuery21Res.status, ")"
         continue
       echo "Results for RKey ", rkeyStripped, ": "
-      echo sqlQuery21Res.results
+      #echo sqlQuery21Res.results
     
     let sqlQuery22 = """SELECT vw_RecordTypeAndAttrTbl.[AttributeTableRKey], 
                              vw_RecordTypeAndAttrTbl.[RecordTypeRKey], 
@@ -555,7 +555,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery22Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery22, " (status code: ", sqlQuery22Res.status, ")"
       return
-    echo sqlQuery22Res.results
+    #echo sqlQuery22Res.results
 
     #[ let boostText23 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 1 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
     let paramsIn23 = boostBinToZip(boostText23)
@@ -605,7 +605,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery25Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery25, " (status code: ", sqlQuery25Res.status, ")"
       return
-    echo sqlQuery25Res.results
+    #echo sqlQuery25Res.results
 
     let sqlQuery26 = """SELECT vw_RecordTypeAndAttrTbl.[AttributeTableRKey], 
                                        vw_RecordTypeAndAttrTbl.[RecordTypeRKey], 
@@ -624,7 +624,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery26Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery26, " (status code: ", sqlQuery26Res.status, ")"
       return
-    echo sqlQuery26Res.results
+    #echo sqlQuery26Res.results
     
     # 1357
     let sqlQuery27 = "[dbo].[sis_ur_GetUserActiveRole]"
@@ -641,7 +641,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery27Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery27, " (status code: ", sqlQuery27Res.status, ")"
       return
-    echo sqlQuery27Res.results
+    #echo sqlQuery27Res.results
 
     let sqlQuery28 = "[dbo].[sis_ReadSettings]"
     let boostText28 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 7 nUserID 1 2 1 0 1 5 1 2" # 2 is the user ID, but I don't know how to get it from a previous query
@@ -659,7 +659,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery28Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery28, " (status code: ", sqlQuery28Res.status, ")"
       return
-    echo sqlQuery28Res.results
+    #echo sqlQuery28Res.results
 
     # second read settings with different user ID?
 
@@ -707,7 +707,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery42Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery42, " (status code: ", sqlQuery42Res.status, ")"
       return
-    echo sqlQuery42Res.results
+    #echo sqlQuery42Res.results
 
     let sqlQuery43 = """SELECT vw_UsersInRole.[name_User], 
                                        vw_UsersInRole.[desc_User], 
@@ -784,8 +784,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     #2349
     #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
-    let sqlQuery46 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg' AND (t1.[attPreviousRecordID] IS NOT NULL OR t1.[attPreviousRecordID] != '')"
-    #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg'"
+    #let sqlQuery46 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg' AND (t1.[attPreviousRecordID] IS NOT NULL OR t1.[attPreviousRecordID] != '')"
+    #let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID], t1.[attRecName], t1.[attRecParentID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpFolder' OR t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
+    let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
     let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
     let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
@@ -801,8 +802,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     if sqlQuery46Res.status != 0:
       echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
       return
-    echo sqlQuery46Res.results
+    #echo sqlQuery46Res.results
     #tableToCsv(sqlQuery46Res.results, "attribute_table_1.csv")
+    #raise newException(ValueError, "Attribute table processing not implemented yet")
     
     var imageEntries = initTable[string, seq[string]]()
     if not sqlQuery46Res.results.hasKey("attRecID"):
@@ -886,8 +888,8 @@ proc downloader*(address: string, port: int, username, password, database, direc
       let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
       for file in fileListResult.fileNames:
         echo "File: ", file
-        continue # skip downloading files for now
-        var filePath = directory
+        #continue # skip downloading files for now
+        var filePath = directory / databaseImageGuid
         if file.contains("\\"):
           var parts = file.split("\\")
           for part in parts:
