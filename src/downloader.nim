@@ -6,7 +6,7 @@ import utils/[boost, zip]
 
 import DotNimRemoting/tcp/client
 
-proc downloader*(address: string, port: int, username, password, database, directory: string) {.async.} =
+proc downloader*(address: string, port: int, username, password, database, directory, filter: string) {.async.} =
   echo "Downloading file"
   echo "Address: ", address
   echo "Port: ", port
@@ -300,7 +300,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery10, " (status code: ", sqlQuery10Res.status, ")"
       return
 
-    echo sqlQuery10Res.results
+    #echo sqlQuery10Res.results
 
     let sqlQuery11 = "[dbo].[sis_GetUserID]"
     let sname = if sqlQuery7Res.results.hasKey("SNAME"): sqlQuery7Res.results["SNAME"][0].strip() else: raise newException(ValueError, "SNAME not found in results")
@@ -883,6 +883,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
       #3969
       let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
       for file in fileListResult.fileNames:
+        if not file.contains(filter):
+          echo "Skipping file due to filter: ", file
+          continue
         echo "File: ", file
         #continue # skip downloading files for now
         var filePath = directory / databaseImageGuid

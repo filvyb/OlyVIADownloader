@@ -523,7 +523,15 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
       discard await closeFile(client, serverGUID, databaseGUID, fileName)
       return false
   
-  # Create/open the output file
+  if fileExists(outputPath):
+    let existingSize = os.getFileSize(outputPath)
+    if existingSize == totalSize:
+      echo "File already exists with correct size: ", outputPath
+      discard await closeFile(client, serverGUID, databaseGUID, fileName)
+      return false
+    else:
+      echo "File exists but size mismatch (existing: ", existingSize, " bytes, expected: ", totalSize, " bytes). Overwriting..."
+
   var outputFile: File
   if not open(outputFile, outputPath, fmWrite):
     echo "Failed to create output file: ", outputPath

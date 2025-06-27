@@ -15,7 +15,7 @@ nimble build -d:release -d:lto
 ## Usage
 
 ```bash
-./OlyVIADownloader -a server:port -db database_name -u username -p password -d download_directory
+./OlyVIADownloader -a server:port -db database_name -u username -p password -d download_directory -f download_filter
 ```
 
 Or with environment variables:
@@ -26,6 +26,7 @@ export DATABASE="database_name"
 export USERNAME="username"
 export PASSWORD="password"
 export DIRECTORY="download_directory"  # Optional, defaults to "download"
+export FILTER="desired_file" # Optional
 ./OlyVIADownloader
 ```
 

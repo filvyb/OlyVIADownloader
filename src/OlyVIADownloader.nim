@@ -9,6 +9,7 @@ when isMainModule:
     option("-u", "--username", "Username for the OlyVIA server")
     option("-p", "--password", "Password for the OlyVIA server")
     option("-d", "--directory", default=some("download"), help="Directory to save the downloaded files")
+    option("-f", "--filter", default=some(""), help="Download files that contain this filter in their name")
 
   let args = p.parse(commandLineParams())
 
@@ -46,10 +47,16 @@ when isMainModule:
     getEnv("DIRECTORY")
   else:
     "download"
-
+  
+  var filter = if args.filter != "":
+    args.filter
+  elif getEnv("FILTER") != "":
+    getEnv("FILTER")
+  else:
+    ""
 
   var addresssplit = address.split(":")
   if addresssplit.len != 2:
     raise newException(ValueError, "Address must be in the format address:port")
 
-  waitFor downloader(addresssplit[0], addresssplit[1].parseInt, username, password, database, directory)
+  waitFor downloader(addresssplit[0], addresssplit[1].parseInt, username, password, database, directory, filter)
