@@ -895,7 +895,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
             filePath = filePath / part
         else:
           filePath = filePath / file
-        let fileStat = await downloadFile(client, serverUrl, databaseImageGuid, file, filePath)
+        let fileStat = await downloadFilePipelined(client, serverUrl, databaseImageGuid, file, filePath)
         if fileStat:
           echo "File downloaded successfully: ", file
         else:

@@ -578,3 +578,101 @@ proc downloadFile*(client: NrtpTcpClient, serverGUID: string, databaseGUID: stri
       echo "Warning: Failed to close file on server"
   
   return true
+
+proc downloadFilePipelined*(client: NrtpTcpClient, serverGUID: string, databaseGUID: string,
+                           fileName: string, outputPath: string, chunkSize: uint32 = 262144'u32): Future[bool] {.async.} =
+  ## Downloads a file with pipelined reading - reads next chunk while writing current chunk
+  
+  echo "Downloading file: ", fileName, " to ", outputPath
+  
+  let openStatus = await openFile(client, serverGUID, databaseGUID, fileName)
+  if openStatus != 0:
+    echo "Failed to open file"
+    return false
+
+  let fileSizeResult = await getFileSize(client, serverGUID, databaseGUID, fileName)
+  if fileSizeResult.status != 0:
+    echo "Failed to get file size"
+    return false
+  
+  let totalSize = fileSizeResult.fileSize
+  echo "Total file size: ", totalSize, " bytes"
+  
+  let outputDir = outputPath.parentDir()
+  if outputDir != "" and not dirExists(outputDir):
+    try:
+      createDir(outputDir)
+      echo "Created directory: ", outputDir
+    except OSError as e:
+      echo "Failed to create directory: ", outputDir, " - ", e.msg
+      discard await closeFile(client, serverGUID, databaseGUID, fileName)
+      return false
+  
+  if fileExists(outputPath):
+    let existingSize = os.getFileSize(outputPath)
+    if existingSize == totalSize:
+      echo "File already exists with correct size: ", outputPath
+      discard await closeFile(client, serverGUID, databaseGUID, fileName)
+      return false
+    else:
+      echo "File exists but size mismatch. Overwriting..."
+
+  var outputFile: File
+  if not open(outputFile, outputPath, fmWrite):
+    echo "Failed to create output file: ", outputPath
+    discard await closeFile(client, serverGUID, databaseGUID, fileName)
+    return false
+  
+  try:
+    var position: int64 = 0
+    var totalRead: int64 = 0
+    var currentReadFuture: Future[tuple[status: int32, data: seq[byte]]]
+    var pendingData: seq[byte]
+    var hasPendingData = false
+    
+    # Start first read
+    if position < totalSize:
+      let remainingBytes = totalSize - position
+      let bytesToRead = if remainingBytes > chunkSize.int64: chunkSize else: remainingBytes.uint32
+      currentReadFuture = readFile(client, serverGUID, databaseGUID, fileName, position, bytesToRead)
+      position += bytesToRead.int64
+    
+    while totalRead < totalSize:
+      # Wait for current read to complete
+      let readResult = await currentReadFuture
+      if readResult.status != 0:
+        echo "\nFailed to read file at position ", position - readResult.data.len
+        return false
+      
+      # Start next read immediately (if more data to read)
+      var nextReadFuture: Future[tuple[status: int32, data: seq[byte]]]
+      var nextReadStarted = false
+      
+      if position < totalSize:
+        let remainingBytes = totalSize - position
+        let bytesToRead = if remainingBytes > chunkSize.int64: chunkSize else: remainingBytes.uint32
+        nextReadFuture = readFile(client, serverGUID, databaseGUID, fileName, position, bytesToRead)
+        position += bytesToRead.int64
+        nextReadStarted = true
+      
+      if readResult.data.len > 0:
+        discard outputFile.writeBuffer(readResult.data[0].unsafeAddr, readResult.data.len)
+        totalRead += readResult.data.len
+        
+        let progress = (totalRead.float / totalSize.float) * 100.0
+        stdout.write("\rProgress: ", formatFloat(progress, ffDecimal, 2), "% (", 
+                    formatFloat(totalRead.float / 1024.0 / 1024.0, ffDecimal, 1), " MB / ",
+                    formatFloat(totalSize.float / 1024.0 / 1024.0, ffDecimal, 1), " MB)")
+        stdout.flushFile()
+      
+      if nextReadStarted:
+        currentReadFuture = nextReadFuture
+
+  finally:
+    outputFile.close()
+    
+    let closeStatus = await closeFile(client, serverGUID, databaseGUID, fileName)
+    if closeStatus != 0:
+      echo "Warning: Failed to close file on server"
+  
+  return true
