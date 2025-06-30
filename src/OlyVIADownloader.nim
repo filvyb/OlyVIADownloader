@@ -10,6 +10,7 @@ when isMainModule:
     option("-p", "--password", "Password for the OlyVIA server")
     option("-d", "--directory", default=some("download"), help="Directory to save the downloaded files")
     option("-f", "--filter", default=some(""), help="Download files that contain this filter in their name")
+    flag("-l", "--list", help="List available files instead of downloading them")
 
   let args = p.parse(commandLineParams())
 
@@ -54,6 +55,10 @@ when isMainModule:
     getEnv("FILTER")
   else:
     ""
+  
+  var listFiles = args.list
+  if getEnv("LIST") != "":
+    listFiles = getEnv("LIST").parseBool
 
   var addresssplit = address.split(":")
   if addresssplit.len != 2:
@@ -66,7 +71,8 @@ when isMainModule:
     password: password,
     database: database,
     directory: directory,
-    filter: filter
+    filter: filter,
+    list: listFiles
   )
 
   waitFor downloader(downloaderConfig)

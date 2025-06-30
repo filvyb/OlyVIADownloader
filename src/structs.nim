@@ -12,6 +12,7 @@ type
     database*: string
     directory*: string
     filter*: string
+    list*: bool
 
 proc `$`*(resultSet: SqlResultSet): string =
   ## Convert the SQL result set to a formatted table string

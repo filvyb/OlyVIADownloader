@@ -885,6 +885,11 @@ proc downloader*(config: DownloaderConfig) {.async.} =
 
     let serverUrl = if sqlQuery44Res.results.hasKey("DbGUID"): sqlQuery44Res.results["DbGUID"][0].strip() else: raise newException(ValueError, "DbGUID not found in results")
     let imageGuids = if imageEntries.hasKey("GUID"): imageEntries["GUID"] else: raise newException(ValueError, "GUID not found in image entries")
+
+    var fileListTable = initTable[string, seq[string]]()
+    fileListTable["Image GUID"] = newSeq[string]()
+    fileListTable["File Names"] = newSeq[string]()
+
     for databaseImageGuid in imageGuids:
       let databaseImageGuid = databaseImageGuid.strip()
       echo "Image GUID: ", databaseImageGuid
@@ -895,7 +900,12 @@ proc downloader*(config: DownloaderConfig) {.async.} =
       #3969
       let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
       for file in fileListResult.fileNames:
-        if not file.contains(config.filter):
+        let fileContains = file.contains(config.filter)
+        if fileContains and config.list:
+          fileListTable["Image GUID"].add(databaseImageGuid)
+          fileListTable["File Names"].add(file)
+          continue
+        if not fileContains:
           echo "Skipping file due to filter: ", file
           continue
         echo "File: ", file
@@ -912,7 +922,9 @@ proc downloader*(config: DownloaderConfig) {.async.} =
           echo "File downloaded successfully: ", file
         else:
           echo "Failed to download file: ", file
-
+    if config.list:
+      echo "File list table:\n", fileListTable
+      
   except Exception as e:
     echo "Error: ", e.msg
   finally:
