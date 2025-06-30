@@ -4,6 +4,14 @@ type
   SqlResultSet* = object
     columns*: seq[string]
     rows*: seq[seq[string]]
+  DownloaderConfig* = object
+    address*: string
+    port*: int
+    username*: string
+    password*: string
+    database*: string
+    directory*: string
+    filter*: string
 
 proc `$`*(resultSet: SqlResultSet): string =
   ## Convert the SQL result set to a formatted table string

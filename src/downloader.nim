@@ -3,24 +3,25 @@ import strutils, os, tables
 
 import comm/[initial, db, files]
 import utils/[boost, zip]
+import structs
 
 import DotNimRemoting/tcp/client
 
-proc downloader*(address: string, port: int, username, password, database, directory, filter: string) {.async.} =
+proc downloader*(config: DownloaderConfig) {.async.} =
   echo "Downloading file"
-  echo "Address: ", address
-  echo "Port: ", port
-  echo "Username: ", username
-  echo "Password: ", password
-  echo "Database: ", database
-  echo "Directory: ", directory
+  echo "Address: ", config.address
+  echo "Port: ", config.port
+  echo "Username: ", config.username
+  echo "Password: ", config.password
+  echo "Database: ", config.database
+  echo "Directory: ", config.directory
   
   # Create directory if it doesn't exist
-  if not dirExists(directory):
-    createDir(directory)
+  if not dirExists(config.directory):
+    createDir(config.directory)
   
   # Create client and connect to server
-  let serverUri = "tcp://" & address & ":" & $port & "/" & "LLRemoteServerAccess"
+  let serverUri = "tcp://" & config.address & ":" & $config.port & "/" & "LLRemoteServerAccess"
   let client = newNrtpTcpClient(serverUri)
 
   var sessionId: int32 = 0
@@ -44,9 +45,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     echo "Server API version: ", apiversion.major, ".", apiversion.minor, ".", apiversion.micro
     
     # Resolve database alias
-    let aliasInfo = await dissolveAlias(client, database)
+    let aliasInfo = await dissolveAlias(client, config.database)
     if aliasInfo.status != 0:
-      echo "Failed to resolve database alias: ", database, " (status code: ", aliasInfo.status, ")"
+      echo "Failed to resolve database alias: ", config.database, " (status code: ", aliasInfo.status, ")"
       return
     
     echo "Database details:"
@@ -61,7 +62,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
     # Connect to database
     let connectStatus = await connectToDatabase(client, sessionId, connectionId, 
                                         aliasInfo.dbName, aliasInfo.dbLocation, aliasInfo.dbmsType,
-                                        username, password)
+                                        config.username, config.password)
     
     if connectStatus != 0:
       echo "Failed to connect to database"
@@ -124,7 +125,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Connection is not active, cannot proceed with query results"
       return
 
-    let sqlQuery3 = "select isnull(DB_ID('" & database & "'), 0) as db_cnt"
+    let sqlQuery3 = "select isnull(DB_ID('" & config.database & "'), 0) as db_cnt"
     # Getting the database ID, I assume
     let sqlQuery3Res = await executeSql(
       client, 
@@ -894,12 +895,12 @@ proc downloader*(address: string, port: int, username, password, database, direc
       #3969
       let fileListResult = await getFileList(client, serverUrl, databaseImageGuid)
       for file in fileListResult.fileNames:
-        if not file.contains(filter):
+        if not file.contains(config.filter):
           echo "Skipping file due to filter: ", file
           continue
         echo "File: ", file
         #continue # skip downloading files for now
-        var filePath = directory / databaseImageGuid
+        var filePath = config.directory / databaseImageGuid
         if file.contains("\\"):
           var parts = file.split("\\")
           for part in parts:

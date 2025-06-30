@@ -1,6 +1,6 @@
 import argparse
 import os, options, asyncdispatch
-import downloader
+import downloader, structs
 
 when isMainModule:
   var p = newParser:
@@ -59,4 +59,14 @@ when isMainModule:
   if addresssplit.len != 2:
     raise newException(ValueError, "Address must be in the format address:port")
 
-  waitFor downloader(addresssplit[0], addresssplit[1].parseInt, username, password, database, directory, filter)
+  let downloaderConfig = DownloaderConfig(
+    address: addresssplit[0],
+    port: addresssplit[1].parseInt,
+    username: username,
+    password: password,
+    database: database,
+    directory: directory,
+    filter: filter
+  )
+
+  waitFor downloader(downloaderConfig)
