@@ -235,7 +235,7 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery7, " (status code: ", sqlQuery7Res.status, ")"
       return
 
-    echo sqlQuery7Res.results
+    #echo sqlQuery7Res.results
 
     #maybe
     #maxBufferedRows = await getMaxBufferedRowCount(client, sessionId, queryResultIds[6])
@@ -411,6 +411,8 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
 
     #echo sqlQuery15Res.results
+    let docIoType = if sqlQuery15Res.results.hasKey("DocIoType"): sqlQuery15Res.results["DocIoType"][0].strip() else: raise newException(ValueError, "DocIoType not found in results")
+    echo "Document IO Type: ", docIoType
 
     let sqlQuery16 = """SELECT vw_AttributeHandlers.[ModuleName], vw_AttributeHandlers.[Version], vw_AttributeHandlers.[Position] 
                                 FROM [dbo].[vw_AttributeHandlers] 
@@ -468,10 +470,13 @@ proc downloader*(address: string, port: int, username, password, database, direc
       return
 
     #echo sqlQuery18Res.results
-    # 601
+
     let sqlQuery19 = "[dbo].[sis_ReadDbObjects]"
     let langid = if sqlQuery17Res.results.hasKey("id_Language"): sqlQuery17Res.results["id_Language"][0].strip() else: raise newException(ValueError, "id_Language not found in results")
-    let boostText19 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 7 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    # 601
+    #let boostText19 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 7 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
+    # 715
+    let boostText19 = "22 serialization::archive 4 0 0 3 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -98 0 19 id_objecttype_param 1 2 1 0 1 5 1 3 1 -98 0 17 id_language_param 1 2 1 0 1 5 1 " & langid
     let paramsIn19 = boostBinToZip(boostText19)
     let sqlQuery19Res = await executeSql(
       client, 
@@ -490,7 +495,14 @@ proc downloader*(address: string, port: int, username, password, database, direc
 
     #echo sqlQuery19Res.results
 
-    # ReadDbObjects maybe thrice, not sure why
+    let rKeyColumn = if sqlQuery19Res.results.hasKey("RKey"): sqlQuery19Res.results["RKey"] else: raise newException(ValueError, "RKey not found in results")
+    let idAttributeColumn = if sqlQuery19Res.results.hasKey("id_AttributeTable"): sqlQuery19Res.results["id_AttributeTable"] else: raise newException(ValueError, "id_AttributeTable not found in results")
+    let index = rKeyColumn.find("atblRecord")
+    if index == -1:
+      raise newException(ValueError, "atblRecord not found in RKey column")
+    let idAttribute = idAttributeColumn[index]
+    echo "Found id_AttributeTable for atblRecord: ", idAttribute
+
     let sqlQuery20 = "SELECT vw_Picklist.[RKey], vw_Picklist.[Datatype], vw_Picklist.[Flags], vw_Picklist.[GUID] FROM [dbo].[vw_Picklist]"
     let sqlQuery20Res = await executeSql(
       client, 
@@ -737,8 +749,8 @@ proc downloader*(address: string, port: int, username, password, database, direc
       if sqlQuery43Res.status != 0:
         echo "Failed to execute SQL query for role ", roleStripped, ": ", sqlQuery43, " (status code: ", sqlQuery43Res.status, ")"
         continue
-      echo "Results for role ", roleStripped, ": "
-      echo sqlQuery43Res.results
+      #echo "Results for role ", roleStripped, ": "
+      #echo sqlQuery43Res.results
     # 1724
     let sqlQuery44 = """SELECT vw_NetImgServers.[id_Server], vw_NetImgServers.[ServerName], 
                                vw_NetImgServers.[Protocol], vw_NetImgServers.[Port], 
@@ -786,9 +798,9 @@ proc downloader*(address: string, port: int, username, password, database, direc
     #let sqlQuery46 = "SELECT t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecParentID] = :B0 ORDER BY [t1].[attRecID] asc"
     #let sqlQuery46 = "SELECT t1.[attRecID], t1.[attRecName] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE [attRecRecordType] = 'rctpImg' AND (t1.[attPreviousRecordID] IS NOT NULL OR t1.[attPreviousRecordID] != '')"
     #let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID], t1.[attRecName], t1.[attRecParentID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpFolder' OR t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
-    let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID] FROM [dbo].[vw_AttributeTable_1] AS [t1] WHERE t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
-    let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
-    let paramsIn46 = boostBinToZip(boostText46)
+    let sqlQuery46 = "SELECT t1.[attRecGUID], t1.[attRecID] FROM [dbo].[vw_AttributeTable_" & idAttribute & "] AS [t1] WHERE t1.[attRecRecordType] = 'rctpImg' ORDER BY t1.[attRecID] asc"
+    #let boostText46 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 389"
+    #let paramsIn46 = boostBinToZip(boostText46)
     let sqlQuery46Res = await executeSql(
       client, 
       sessionId, 
@@ -803,21 +815,20 @@ proc downloader*(address: string, port: int, username, password, database, direc
       echo "Failed to execute SQL query: ", sqlQuery46, " (status code: ", sqlQuery46Res.status, ")"
       return
     #echo sqlQuery46Res.results
-    #tableToCsv(sqlQuery46Res.results, "attribute_table_1.csv")
     
     var imageEntries = initTable[string, seq[string]]()
     if not sqlQuery46Res.results.hasKey("attRecID"):
       raise newException(ValueError, "attRecID not found in results")
     for attRecID in sqlQuery46Res.results["attRecID"]:
       #3901
-      let sqlQuery47 = """SELECT tb_DocumentIOType_5.[attRecID], 
-                                        tb_DocumentIOType_5.[id_NetImgServer], 
-                                        tb_DocumentIOType_5.[VolumeGUID], 
-                                        tb_DocumentIOType_5.[GUID], 
-                                        tb_DocumentIOType_5.[FileName], 
-                                        tb_DocumentIOType_5.[EntryType] 
-                                  FROM [dbo].[tb_DocumentIOType_5] 
-                                  WHERE [attRecID] = :B0"""
+      let sqlQuery47 = """SELECT tb_DocumentIOType_""" & docIoType & """.[attRecID], 
+                    tb_DocumentIOType_""" & docIoType & """.[id_NetImgServer], 
+                    tb_DocumentIOType_""" & docIoType & """.[VolumeGUID], 
+                    tb_DocumentIOType_""" & docIoType & """.[GUID], 
+                    tb_DocumentIOType_""" & docIoType & """.[FileName], 
+                    tb_DocumentIOType_""" & docIoType & """.[EntryType] 
+                  FROM [dbo].[tb_DocumentIOType_""" & docIoType & """] 
+                  WHERE [attRecID] = :B0"""
       #let attRecID = 5384
       let boostText47 = "22 serialization::archive 4 0 0 2 0 0 0 1 -94 -1 0  0 0 1 2 0 0 1 0 0 0 1 5 1 1 1 -99 -1 2 B0 1 3 1 0 1 7 1 " & $attRecID.strip()
       let paramsIn47 = boostBinToZip(boostText47)
