@@ -1,0 +1,129 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers on version tags like v1.0.0
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: OlyVIADownloader-linux-amd64
+            binary_name: OlyVIADownloader
+          - os: windows-latest
+            platform: windows
+            artifact_name: OlyVIADownloader-windows-amd64.exe
+            binary_name: OlyVIADownloader.exe
+          - os: macos-latest
+            platform: macos
+            artifact_name: OlyVIADownloader-darwin-amd64
+            binary_name: OlyVIADownloader
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: 'stable'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: nimble install -y
+
+      - name: Build release binary
+        run: |
+          nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
+          
+      - name: Rename binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            mv ${{ matrix.binary_name }} ${{ matrix.artifact_name }}
+          else
+            mv ${{ matrix.binary_name }} ${{ matrix.artifact_name }}
+            chmod +x ${{ matrix.artifact_name }}
+          fi
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la ./artifacts/
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+          body: |
+            Release ${{ github.ref_name }}
+            
+            ## Changes
+            - Add your release notes here
+            
+            ## Downloads
+            - **Linux**: OlyVIADownloader-linux-amd64
+            - **macOS**: OlyVIADownloader-darwin-amd64
+            - **Windows**: OlyVIADownloader-windows-amd64.exe
+
+      - name: Upload Linux Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
+          asset_name: OlyVIADownloader-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
+          asset_name: OlyVIADownloader-darwin-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
+          asset_name: OlyVIADownloader-windows-amd64.exe
+          asset_content_type: application/octet-stream
