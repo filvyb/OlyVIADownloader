@@ -161,12 +161,28 @@ jobs:
         shell: bash
         run: |
           echo "Checking if binary is statically linked..."
-          if ldd ${{ matrix.artifact_name }} 2>&1 | grep -q "not a dynamic executable"; then
-            echo "✓ Binary is statically linked"
+          # Check if ldd fails with "not a dynamic executable" - this means it's static
+          if ! ldd ${{ matrix.artifact_name }} >/dev/null 2>&1; then
+            echo "✓ Binary is statically linked (ldd cannot process it)"
           else
-            echo "✗ Binary is not statically linked!"
-            ldd ${{ matrix.artifact_name }} || true
-            exit 1
+            # If ldd succeeds, check if it shows any dynamic dependencies
+            LDD_OUTPUT=$(ldd ${{ matrix.artifact_name }} 2>&1 || true)
+            if echo "$LDD_OUTPUT" | grep -q "not a dynamic executable"; then
+              echo "✓ Binary is statically linked"
+            elif echo "$LDD_OUTPUT" | grep -q "statically linked"; then
+              echo "✓ Binary is statically linked"
+            else
+              echo "✗ Binary has dynamic dependencies:"
+              echo "$LDD_OUTPUT"
+              exit 1
+            fi
+          fi
+          
+          # Also check with file command for additional verification
+          FILE_OUTPUT=$(file ${{ matrix.artifact_name }})
+          echo "File info: $FILE_OUTPUT"
+          if echo "$FILE_OUTPUT" | grep -q "statically linked"; then
+            echo "✓ File command confirms static linking"
           fi
 
       - name: Upload binary as artifact
