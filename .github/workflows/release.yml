@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }} ${{ matrix.arch }} ${{ matrix.libc || '' }}
+    name: Build for ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -27,22 +27,6 @@ jobs:
             platform: linux
             arch: arm64
             artifact_name: OlyVIADownloader-linux-arm64
-            binary_name: OlyVIADownloader
-            
-          # Linux AMD64 Musl (static)
-          - os: ubuntu-latest
-            platform: linux
-            arch: amd64
-            libc: musl
-            artifact_name: OlyVIADownloader-linux-amd64-musl
-            binary_name: OlyVIADownloader
-            
-          # Linux ARM64 Musl (static)
-          - os: ubuntu-latest
-            platform: linux
-            arch: arm64
-            libc: musl
-            artifact_name: OlyVIADownloader-linux-arm64-musl
             binary_name: OlyVIADownloader
             
           # Windows AMD64
@@ -78,55 +62,18 @@ jobs:
 
       # Setup cross-compilation for Linux ARM64
       - name: Setup ARM64 cross-compilation
-        if: matrix.platform == 'linux' && matrix.arch == 'arm64' && (!matrix.libc || matrix.libc == '')
+        if: matrix.platform == 'linux' && matrix.arch == 'arm64'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-
-      # Setup musl tools for static builds
-      - name: Setup musl tools for AMD64
-        if: matrix.platform == 'linux' && matrix.arch == 'amd64' && matrix.libc == 'musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools upx-ucl
-
-      # Setup musl cross-compilation for ARM64
-      - name: Setup musl tools for ARM64
-        if: matrix.platform == 'linux' && matrix.arch == 'arm64' && matrix.libc == 'musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx-ucl
-          
-          # Download and setup musl cross compiler for ARM64
-          wget https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/aarch64-linux-musl-cross.tgz
-          tar xzf aarch64-linux-musl-cross.tgz
-          sudo mv aarch64-linux-musl-cross /opt/
-          echo "/opt/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: nimble install -y
 
       - name: Build release binary
         run: |
-          if [ "${{ matrix.libc }}" = "musl" ]; then
-            if [ "${{ matrix.arch }}" = "amd64" ]; then
-              # Musl build for AMD64
-              nimble build -d:release --opt:size \
-                --gcc.exe:musl-gcc --gcc.linkerexe:musl-gcc \
-                --passL:"-static"
-            else
-              # Musl cross-compile for ARM64
-              export CC=aarch64-linux-musl-gcc
-              export CXX=aarch64-linux-musl-g++
-              export LD=aarch64-linux-musl-ld
-              export AR=aarch64-linux-musl-ar
-              nimble build -d:release --opt:size --cpu:arm64 --os:linux \
-                --gcc.exe:aarch64-linux-musl-gcc \
-                --gcc.linkerexe:aarch64-linux-musl-gcc \
-                --passL:"-static"
-            fi
-          elif [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Cross-compile for Linux ARM64 (glibc)
+          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            # Cross-compile for Linux ARM64
             nimble build -d:release --opt:size --cpu:arm64 --os:linux \
               --gcc.exe:aarch64-linux-gnu-gcc \
               --gcc.linkerexe:aarch64-linux-gnu-gcc \
@@ -136,18 +83,6 @@ jobs:
             nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
           fi
         shell: bash
-
-      - name: Strip and compress musl binaries
-        if: matrix.libc == 'musl'
-        shell: bash
-        run: |
-          if [ "${{ matrix.arch }}" = "amd64" ]; then
-            strip -s ${{ matrix.binary_name }}
-          else
-            # Use the cross-compiler's strip for ARM64
-            aarch64-linux-musl-strip -s ${{ matrix.binary_name }}
-          fi
-          upx --best ${{ matrix.binary_name }}
           
       - name: Rename binary
         shell: bash
@@ -157,35 +92,6 @@ jobs:
           else
             mv ${{ matrix.binary_name }} ${{ matrix.artifact_name }}
             chmod +x ${{ matrix.artifact_name }}
-          fi
-
-      - name: Test musl binary is static
-        if: matrix.libc == 'musl'
-        shell: bash
-        run: |
-          echo "Checking if binary is statically linked..."
-          # Check if ldd fails with "not a dynamic executable" - this means it's static
-          if ! ldd ${{ matrix.artifact_name }} >/dev/null 2>&1; then
-            echo "✓ Binary is statically linked (ldd cannot process it)"
-          else
-            # If ldd succeeds, check if it shows any dynamic dependencies
-            LDD_OUTPUT=$(ldd ${{ matrix.artifact_name }} 2>&1 || true)
-            if echo "$LDD_OUTPUT" | grep -q "not a dynamic executable"; then
-              echo "✓ Binary is statically linked"
-            elif echo "$LDD_OUTPUT" | grep -q "statically linked"; then
-              echo "✓ Binary is statically linked"
-            else
-              echo "✗ Binary has dynamic dependencies:"
-              echo "$LDD_OUTPUT"
-              exit 1
-            fi
-          fi
-          
-          # Also check with file command for additional verification
-          FILE_OUTPUT=$(file ${{ matrix.artifact_name }})
-          echo "File info: $FILE_OUTPUT"
-          if echo "$FILE_OUTPUT" | grep -q "statically linked"; then
-            echo "✓ File command confirms static linking"
           fi
 
       - name: Upload binary as artifact
@@ -249,13 +155,9 @@ jobs:
             
             ### Downloads
             
-            #### Linux (glibc - standard)
+            #### Linux
             - **x86_64/AMD64**: `OlyVIADownloader-linux-amd64`
             - **ARM64/AArch64**: `OlyVIADownloader-linux-arm64`
-            
-            #### Linux (musl - static, portable)
-            - **x86_64/AMD64**: `OlyVIADownloader-linux-amd64-musl` *(fully static, works on any Linux)*
-            - **ARM64/AArch64**: `OlyVIADownloader-linux-arm64-musl` *(fully static, works on any Linux)*
             
             #### macOS
             - **Intel (x86_64)**: `OlyVIADownloader-darwin-amd64`
@@ -264,18 +166,11 @@ jobs:
             #### Windows
             - **x86_64/AMD64**: `OlyVIADownloader-windows-amd64.exe`
             
-            ### Which Linux version should I download?
-            
-            - **Standard (glibc)**: Smaller file size, requires glibc to be installed (most Linux distros)
-            - **Static (musl)**: Larger file size, but works on ANY Linux system including Alpine, minimal containers, or old distros
-            
             ---
             *Note: This release is automatically updated with each commit to the master branch.*
           artifacts: |
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
             ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64
-            ./artifacts/OlyVIADownloader-linux-amd64-musl/OlyVIADownloader-linux-amd64-musl
-            ./artifacts/OlyVIADownloader-linux-arm64-musl/OlyVIADownloader-linux-arm64-musl
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
@@ -296,16 +191,12 @@ jobs:
             --target ${{ github.sha }} \
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
             ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64 \
-            ./artifacts/OlyVIADownloader-linux-amd64-musl/OlyVIADownloader-linux-amd64-musl \
-            ./artifacts/OlyVIADownloader-linux-arm64-musl/OlyVIADownloader-linux-arm64-musl \
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
             || gh release upload continuous \
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
             ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64 \
-            ./artifacts/OlyVIADownloader-linux-amd64-musl/OlyVIADownloader-linux-amd64-musl \
-            ./artifacts/OlyVIADownloader-linux-arm64-musl/OlyVIADownloader-linux-arm64-musl \
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
