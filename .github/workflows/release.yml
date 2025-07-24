@@ -60,11 +60,17 @@ jobs:
           nim-version: 'stable'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Install UPX for Linux builds
+      - name: Install UPX (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
       # Setup cross-compilation for Linux ARM64
       - name: Setup ARM64 cross-compilation
         if: matrix.platform == 'linux' && matrix.arch == 'arm64'
         run: |
-          sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Install dependencies
@@ -73,16 +79,44 @@ jobs:
       - name: Build release binary
         run: |
           if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Cross-compile for Linux ARM64
+            # Cross-compile for Linux ARM64 with static linking
             nimble build -d:release --opt:size --cpu:arm64 --os:linux \
               --gcc.exe:aarch64-linux-gnu-gcc \
               --gcc.linkerexe:aarch64-linux-gnu-gcc \
-              --passC:"-flto" --passL:"-s"
+              --passC:"-flto" \
+              --passL:"-static -s"
+          elif [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "amd64" ]; then
+            # Native Linux AMD64 with static linking
+            nimble build -d:release --opt:size \
+              --passC:"-flto" \
+              --passL:"-static -s"
           else
-            # Native compilation
+            # Non-Linux platforms (Windows, macOS)
             nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
           fi
         shell: bash
+
+      # Strip and compress Linux binaries
+      - name: Optimize Linux binary
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          # First strip the binary (extra safety, though -s in linking should handle it)
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            # Use cross-platform strip for ARM64
+            aarch64-linux-gnu-strip -s ${{ matrix.binary_name }} || true
+          else
+            # Use native strip for AMD64
+            strip -s ${{ matrix.binary_name }} || true
+          fi
+          
+          # Then compress with UPX
+          # Note: UPX on x86_64 can compress ARM64 binaries
+          upx --best ${{ matrix.binary_name }} || echo "UPX compression failed, continuing without compression"
+          
+          # Show final binary info
+          ls -lh ${{ matrix.binary_name }}
+          file ${{ matrix.binary_name }}
           
       - name: Rename binary
         shell: bash
@@ -155,9 +189,9 @@ jobs:
             
             ### Downloads
             
-            #### Linux
-            - **x86_64/AMD64**: `OlyVIADownloader-linux-amd64`
-            - **ARM64/AArch64**: `OlyVIADownloader-linux-arm64`
+            #### Linux (Static Binaries)
+            - **x86_64/AMD64**: `OlyVIADownloader-linux-amd64` (static, stripped, UPX compressed)
+            - **ARM64/AArch64**: `OlyVIADownloader-linux-arm64` (static, stripped, UPX compressed)
             
             #### macOS
             - **Intel (x86_64)**: `OlyVIADownloader-darwin-amd64`
@@ -168,6 +202,7 @@ jobs:
             
             ---
             *Note: This release is automatically updated with each commit to the master branch.*
+            *Linux binaries are statically linked and compressed with UPX for minimal size and maximum portability.*
           artifacts: |
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
             ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64
