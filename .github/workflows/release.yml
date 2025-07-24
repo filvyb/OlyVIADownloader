@@ -3,29 +3,51 @@ name: Continuous Build and Release
 on:
   push:
     branches:
-      - master  # or master, depending on your default branch
+      - master
   pull_request:
     branches:
       - master
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
+    name: Build for ${{ matrix.os }} ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
+          # Linux AMD64
           - os: ubuntu-latest
             platform: linux
+            arch: amd64
             artifact_name: OlyVIADownloader-linux-amd64
             binary_name: OlyVIADownloader
+            
+          # Linux ARM64
+          - os: ubuntu-latest
+            platform: linux
+            arch: arm64
+            artifact_name: OlyVIADownloader-linux-arm64
+            binary_name: OlyVIADownloader
+            
+          # Windows AMD64
           - os: windows-latest
             platform: windows
+            arch: amd64
             artifact_name: OlyVIADownloader-windows-amd64.exe
             binary_name: OlyVIADownloader.exe
-          - os: macos-latest
+            
+          # macOS AMD64 (Intel)
+          - os: macos-13  # Last Intel-based runner
             platform: macos
+            arch: amd64
             artifact_name: OlyVIADownloader-darwin-amd64
+            binary_name: OlyVIADownloader
+            
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest  # M1/M2 runner
+            platform: macos
+            arch: arm64
+            artifact_name: OlyVIADownloader-darwin-arm64
             binary_name: OlyVIADownloader
 
     steps:
@@ -38,12 +60,29 @@ jobs:
           nim-version: 'stable'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Setup cross-compilation for Linux ARM64
+      - name: Setup ARM64 cross-compilation
+        if: matrix.platform == 'linux' && matrix.arch == 'arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
       - name: Install dependencies
         run: nimble install -y
 
       - name: Build release binary
         run: |
-          nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
+          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            # Cross-compile for Linux ARM64
+            nimble build -d:release --opt:size --cpu:arm64 --os:linux \
+              --gcc.exe:aarch64-linux-gnu-gcc \
+              --gcc.linkerexe:aarch64-linux-gnu-gcc \
+              --passC:"-flto" --passL:"-s"
+          else
+            # Native compilation
+            nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
+          fi
+        shell: bash
           
       - name: Rename binary
         shell: bash
@@ -115,15 +154,25 @@ jobs:
             ${{ github.event.head_commit.message }}
             
             ### Downloads
-            - **Linux**: `OlyVIADownloader-linux-amd64`
-            - **macOS**: `OlyVIADownloader-darwin-amd64`
-            - **Windows**: `OlyVIADownloader-windows-amd64.exe`
+            
+            #### Linux
+            - **x86_64/AMD64**: `OlyVIADownloader-linux-amd64`
+            - **ARM64/AArch64**: `OlyVIADownloader-linux-arm64`
+            
+            #### macOS
+            - **Intel (x86_64)**: `OlyVIADownloader-darwin-amd64`
+            - **Apple Silicon (ARM64)**: `OlyVIADownloader-darwin-arm64`
+            
+            #### Windows
+            - **x86_64/AMD64**: `OlyVIADownloader-windows-amd64.exe`
             
             ---
             *Note: This release is automatically updated with each commit to the master branch.*
           artifacts: |
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
+            ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
+            ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
           allowUpdates: true
           removeArtifacts: true
@@ -141,11 +190,15 @@ jobs:
             --prerelease \
             --target ${{ github.sha }} \
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
+            ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64 \
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
+            ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
             || gh release upload continuous \
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
+            ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64 \
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
+            ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
             --clobber
         env:
