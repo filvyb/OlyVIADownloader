@@ -78,7 +78,7 @@ jobs:
 
       # Setup cross-compilation for Linux ARM64
       - name: Setup ARM64 cross-compilation
-        if: matrix.platform == 'linux' && matrix.arch == 'arm64' && matrix.libc != 'musl'
+        if: matrix.platform == 'linux' && matrix.arch == 'arm64' && (!matrix.libc || matrix.libc == '')
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
