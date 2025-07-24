@@ -1,6 +1,19 @@
 import argparse
-import os, options, asyncdispatch
+import os, options, asyncdispatch, strutils
 import downloader, structs
+
+const AppVersion = block:
+  const nimbleFile = staticRead("../OlyVIADownloader.nimble")
+  var version = "unknown"
+  for line in nimbleFile.splitLines():
+    let cleanLine = line.strip()
+    if cleanLine.startsWith("version") and "=" in cleanLine:
+      let parts = cleanLine.split("=", 1)
+      if parts.len == 2:
+        let versionPart = parts[1].strip()
+        version = versionPart.strip(chars = {'"', '\''})
+        break
+  version
 
 when isMainModule:
   var p = newParser:
@@ -11,8 +24,14 @@ when isMainModule:
     option("-d", "--directory", default=some("download"), help="Directory to save the downloaded files")
     option("-f", "--filter", default=some(""), help="Download files that contain this filter in their name")
     flag("-l", "--list", help="List available files instead of downloading them")
+    flag("-v", "--version", help="Show version information")
 
   let args = p.parse(commandLineParams())
+
+  # Handle version flag
+  if args.version:
+    echo "OlyVIADownloader version ", AppVersion
+    quit(0)
 
   var address = if args.address != "":
     args.address
