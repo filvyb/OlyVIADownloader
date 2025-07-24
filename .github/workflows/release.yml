@@ -1,9 +1,12 @@
-name: Build and Release
+name: Continuous Build and Release
 
 on:
   push:
-    tags:
-      - 'v*' # Triggers on version tags like v1.0.0
+    branches:
+      - master  # or master, depending on your default branch
+  pull_request:
+    branches:
+      - master
 
 jobs:
   build:
@@ -59,9 +62,10 @@ jobs:
           path: ${{ matrix.artifact_name }}
 
   release:
-    name: Create Release
+    name: Create or Update Continuous Release
     needs: build
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: write
       
@@ -77,53 +81,72 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -la ./artifacts/
 
-      - name: Create Release
+      - name: Generate build info
+        id: build_info
+        run: |
+          echo "date=$(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "sha_long=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Delete old continuous release
+        uses: dev-drprasad/delete-tag-and-release@v1.0
+        with:
+          tag_name: continuous
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          delete_release: true
+        continue-on-error: true
+
+      - name: Create continuous release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          tag: continuous
+          name: Continuous Build
           body: |
-            Release ${{ github.ref_name }}
+            ## Continuous Build
             
-            ## Changes
-            - Add your release notes here
+            **⚠️ This is an automated build from the latest commit on the master branch.**
             
-            ## Downloads
-            - **Linux**: OlyVIADownloader-linux-amd64
-            - **macOS**: OlyVIADownloader-darwin-amd64
-            - **Windows**: OlyVIADownloader-windows-amd64.exe
+            - **Build Date**: ${{ steps.build_info.outputs.date }}
+            - **Commit**: ${{ steps.build_info.outputs.sha_long }}
+            - **Short SHA**: ${{ steps.build_info.outputs.sha_short }}
+            
+            ### Latest Changes
+            ${{ github.event.head_commit.message }}
+            
+            ### Downloads
+            - **Linux**: `OlyVIADownloader-linux-amd64`
+            - **macOS**: `OlyVIADownloader-darwin-amd64`
+            - **Windows**: `OlyVIADownloader-windows-amd64.exe`
+            
+            ---
+            *Note: This release is automatically updated with each commit to the master branch.*
+          artifacts: |
+            ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
+            ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
+            ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Linux Binary
-        uses: actions/upload-release-asset@v1
+      - name: Upload artifacts to release (alternative method)
+        if: failure()
+        run: |
+          # Fallback if the above step fails
+          gh release create continuous \
+            --title "Continuous Build" \
+            --notes "Automated build from commit ${{ github.sha }}" \
+            --prerelease \
+            --target ${{ github.sha }} \
+            ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
+            ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
+            ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
+            || gh release upload continuous \
+            ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
+            ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
+            ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
+            --clobber
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64
-          asset_name: OlyVIADownloader-linux-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
-          asset_name: OlyVIADownloader-darwin-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
-          asset_name: OlyVIADownloader-windows-amd64.exe
-          asset_content_type: application/octet-stream
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
