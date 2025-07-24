@@ -84,15 +84,15 @@ jobs:
               --gcc.exe:aarch64-linux-gnu-gcc \
               --gcc.linkerexe:aarch64-linux-gnu-gcc \
               --passC:"-flto" \
-              --passL:"-static -s"
+              --passL:"-static"
           elif [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "amd64" ]; then
             # Native Linux AMD64 with static linking
             nimble build -d:release --opt:size \
               --passC:"-flto" \
-              --passL:"-static -s"
+              --passL:"-static"
           else
             # Non-Linux platforms (Windows, macOS)
-            nimble build -d:release --opt:size --passC:"-flto" --passL:"-s"
+            nimble build -d:release --opt:size --passC:"-flto"
           fi
         shell: bash
 
@@ -101,13 +101,13 @@ jobs:
         if: matrix.platform == 'linux'
         shell: bash
         run: |
-          # First strip the binary (extra safety, though -s in linking should handle it)
+          # Strip debug symbols from the binary
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             # Use cross-platform strip for ARM64
-            aarch64-linux-gnu-strip -s ${{ matrix.binary_name }} || true
+            aarch64-linux-gnu-strip -s ${{ matrix.binary_name }}
           else
             # Use native strip for AMD64
-            strip -s ${{ matrix.binary_name }} || true
+            strip -s ${{ matrix.binary_name }}
           fi
           
           # Then compress with UPX
