@@ -37,14 +37,14 @@ jobs:
             binary_name: OlyVIADownloader.exe
             
           # macOS AMD64 (Intel)
-          - os: macos-13  # Last Intel-based runner
+          - os: macos-15-intel
             platform: macos
             arch: amd64
             artifact_name: OlyVIADownloader-darwin-amd64
             binary_name: OlyVIADownloader
             
           # macOS ARM64 (Apple Silicon)
-          - os: macos-latest  # M1/M2 runner
+          - os: macos-latest
             platform: macos
             arch: arm64
             artifact_name: OlyVIADownloader-darwin-arm64
@@ -182,7 +182,6 @@ jobs:
             
             - **Build Date**: ${{ steps.build_info.outputs.date }}
             - **Commit**: ${{ steps.build_info.outputs.sha_long }}
-            - **Short SHA**: ${{ steps.build_info.outputs.sha_short }}
             
             ### Latest Changes
             ${{ github.event.head_commit.message }}
