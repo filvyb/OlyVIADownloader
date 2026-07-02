@@ -23,19 +23,26 @@ jobs:
             binary_name: OlyVIADownloader
             
           # Linux ARM64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             platform: linux
             arch: arm64
             artifact_name: OlyVIADownloader-linux-arm64
             binary_name: OlyVIADownloader
-            
+
           # Windows AMD64
           - os: windows-latest
             platform: windows
             arch: amd64
             artifact_name: OlyVIADownloader-windows-amd64.exe
             binary_name: OlyVIADownloader.exe
-            
+
+          # Windows ARM64
+          - os: windows-11-arm
+            platform: windows
+            arch: arm64
+            artifact_name: OlyVIADownloader-windows-arm64.exe
+            binary_name: OlyVIADownloader.exe
+
           # macOS AMD64 (Intel)
           - os: macos-15-intel
             platform: macos
@@ -52,10 +59,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Nim
-        uses: jiro4989/setup-nim-action@v2
+        uses: jiro4989/setup-nim-action@v2.3.0
         with:
           nim-version: 'stable'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -67,31 +74,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y upx-ucl
 
-      # Setup cross-compilation for Linux ARM64
-      - name: Setup ARM64 cross-compilation
-        if: matrix.platform == 'linux' && matrix.arch == 'arm64'
-        run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      # Setup native MSVC toolchain for Windows ARM64
+      - name: Setup MSVC (Windows ARM64)
+        if: matrix.platform == 'windows' && matrix.arch == 'arm64'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
 
       - name: Install dependencies
         run: nimble install -y --solver:legacy
 
       - name: Build release binary
         run: |
-          if [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Cross-compile for Linux ARM64 with static linking
-            nimble build -d:release --opt:size --cpu:arm64 --os:linux \
-              --gcc.exe:aarch64-linux-gnu-gcc \
-              --gcc.linkerexe:aarch64-linux-gnu-gcc \
-              --passC:"-flto" \
-              --passL:"-static"
-          elif [ "${{ matrix.platform }}" = "linux" ] && [ "${{ matrix.arch }}" = "amd64" ]; then
-            # Native Linux AMD64 with static linking
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            # Native Linux (AMD64 or ARM64) with static linking
             nimble build -d:release --opt:size \
               --passC:"-flto" \
               --passL:"-static"
+          elif [ "${{ matrix.platform }}" = "windows" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            # Native Windows ARM64 using the MSVC toolchain (targets ARM64 on the ARM runner)
+            nimble build -d:release --opt:size --cc:vcc
           else
-            # Non-Linux platforms (Windows, macOS)
+            # Windows AMD64 and macOS
             nimble build -d:release --opt:size --passC:"-flto"
           fi
         shell: bash
@@ -101,17 +105,10 @@ jobs:
         if: matrix.platform == 'linux'
         shell: bash
         run: |
-          # Strip debug symbols from the binary
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            # Use cross-platform strip for ARM64
-            aarch64-linux-gnu-strip -s ${{ matrix.binary_name }}
-          else
-            # Use native strip for AMD64
-            strip -s ${{ matrix.binary_name }}
-          fi
-          
+          # Strip debug symbols from the binary (native strip on each runner)
+          strip -s ${{ matrix.binary_name }}
+
           # Then compress with UPX
-          # Note: UPX on x86_64 can compress ARM64 binaries
           upx --best ${{ matrix.binary_name }} || echo "UPX compression failed, continuing without compression"
           
           # Show final binary info
@@ -129,7 +126,7 @@ jobs:
           fi
 
       - name: Upload binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_name }}
@@ -144,10 +141,10 @@ jobs:
       
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ./artifacts
 
@@ -162,11 +159,9 @@ jobs:
           echo "sha_long=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Delete old continuous release
-        uses: dev-drprasad/delete-tag-and-release@v1.0
-        with:
-          tag_name: continuous
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          delete_release: true
+        run: gh release delete continuous --cleanup-tag --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: Create continuous release
@@ -198,6 +193,7 @@ jobs:
             
             #### Windows
             - **x86_64/AMD64**: `OlyVIADownloader-windows-amd64.exe`
+            - **ARM64/AArch64**: `OlyVIADownloader-windows-arm64.exe`
             
             ---
             *Note: This release is automatically updated with each commit to the master branch.*
@@ -208,6 +204,7 @@ jobs:
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe
+            ./artifacts/OlyVIADownloader-windows-arm64.exe/OlyVIADownloader-windows-arm64.exe
           allowUpdates: true
           removeArtifacts: true
           makeLatest: true
@@ -228,12 +225,14 @@ jobs:
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
+            ./artifacts/OlyVIADownloader-windows-arm64.exe/OlyVIADownloader-windows-arm64.exe \
             || gh release upload continuous \
             ./artifacts/OlyVIADownloader-linux-amd64/OlyVIADownloader-linux-amd64 \
             ./artifacts/OlyVIADownloader-linux-arm64/OlyVIADownloader-linux-arm64 \
             ./artifacts/OlyVIADownloader-darwin-amd64/OlyVIADownloader-darwin-amd64 \
             ./artifacts/OlyVIADownloader-darwin-arm64/OlyVIADownloader-darwin-arm64 \
             ./artifacts/OlyVIADownloader-windows-amd64.exe/OlyVIADownloader-windows-amd64.exe \
+            ./artifacts/OlyVIADownloader-windows-arm64.exe/OlyVIADownloader-windows-arm64.exe \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
