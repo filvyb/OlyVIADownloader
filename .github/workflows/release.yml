@@ -74,7 +74,7 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Install dependencies
-        run: nimble install -y
+        run: nimble install -y --solver:legacy
 
       - name: Build release binary
         run: |

@@ -6,3 +6,4 @@ nimble.develop
 nimble.paths
 bin/
 download/
+nimbledeps
