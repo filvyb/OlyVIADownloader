@@ -33,7 +33,7 @@ export LIST=true # Optional
 ./OlyVIADownloader
 ```
 
-Downloaded .vsi files can be viewed with [ImageJ](https://imagej.net/formats/olympus) or [Fiji](https://fiji.sc/) or viewed and processed with [bftools](https://bio-formats.readthedocs.io/en/stable/users/comlinetools/index.html)
+Downloaded .vsi files can be viewed with [ImageJ](https://imagej.net/formats/olympus), [Fiji](https://fiji.sc/) or [QuPath](https://qupath.github.io/) or viewed and processed with [bftools](https://bio-formats.readthedocs.io/en/stable/users/comlinetools/index.html)
 
 ## License
 
