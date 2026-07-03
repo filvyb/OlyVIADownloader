@@ -12,6 +12,8 @@ nimble install -d:release -d:lto
 nimble build -d:release -d:lto
 ```
 
+Build executables are available in [Releases](https://github.com/filvyb/OlyVIADownloader/releases)
+
 ## Usage
 
 ```bash
