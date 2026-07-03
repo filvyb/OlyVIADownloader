@@ -1,32 +1,21 @@
-import faststreams/inputs
-import asyncdispatch
+import asyncdispatch, options
 
 import DotNimRemoting/tcp/[client, common]
 import DotNimRemoting/msnrbf/[helpers, grammar, enums]
-import DotNimRemoting/msnrbf/records/[methodinv, member]
+import DotNimRemoting/msnrbf/records/methodinv
 
 proc testConnection*(client: NrtpTcpClient): Future[bool] {.async.} =
   ## Tests the connection to the server by invoking the "Test" method
   # Create a "Test" method call to verify connectivity
   let typeName = "dbapi.dni.ILLRemoteServerAccess, LLDbRemoting"
-  let requestData = createMethodCallRequest(
-    methodName = "Test",
-    typeName = typeName
-  )
-  
+
   echo "Testing connection to server..."
-  let responseData = await client.invoke("Test", typeName, false, requestData)
-  
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptBoolean:
-      echo "Connection test successful!"
-      return ret.returnValue.value.boolVal
-  
+  let ret = await client.call("Test", typeName)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptBoolean:
+    echo "Connection test successful!"
+    return ret.getBool
+
   echo "Connection test failed"
   return false
 
@@ -38,25 +27,15 @@ proc createSession*(client: NrtpTcpClient): Future[int32] {.async.} =
 
   # Create a "Create" method call to create a session on the server
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  let requestData = createMethodCallRequest(
-    methodName = "Create",
-    typeName = typeName
-  )
-  
+
   echo "Creating session..."
-  let responseData = await client.invoke("Create", typeName, false, requestData)
-  
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let sessionId = ret.returnValue.value.int32Val
-      echo "Session created with ID: ", sessionId
-      return sessionId
-  
+  let ret = await client.call("Create", typeName)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let sessionId = ret.getInt32
+    echo "Session created with ID: ", sessionId
+    return sessionId
+
   echo "Failed to create session"
   raise newException(IOError, "Failed to create session")
 
@@ -72,25 +51,24 @@ proc getInterfaceVersion*(client: NrtpTcpClient, interfaceId: uint32): Future[tu
   
   # Create arguments: interfaceId and placeholders for ref parameters
   let args = @[
-    uint32Value(interfaceId),  # Interface ID (uint32)
-    int32Value(-1),  # Placeholder for ref Major parameter
-    int32Value(-1),  # Placeholder for ref Minor parameter
-    int32Value(-1)   # Placeholder for ref Micro parameter
+    toRemotingValue(interfaceId),  # Interface ID (uint32)
+    toRemotingValue(-1'i32),       # Placeholder for ref Major parameter
+    toRemotingValue(-1'i32),       # Placeholder for ref Minor parameter
+    toRemotingValue(-1'i32)        # Placeholder for ref Micro parameter
   ]
-  
+
   # Create request
   let requestData = createMethodCallRequest(
     methodName = "GetInterfaceVersion",
     typeName = typeName,
     args = args
   )
-  
+
   echo "Getting interface version..."
   let responseData = await client.invoke("GetInterfaceVersion", typeName, false, requestData)
-  
+
   # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
+  let msg = deserializeRemotingMessage(responseData)
   
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
@@ -119,36 +97,15 @@ proc createConnectionObject*(client: NrtpTcpClient, sessionId: int32): Future[in
 
   # Create a "CreateConnectionObject" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create argument: sessionId
-  let args = @[
-    int32Value(sessionId)  # Session ID (int32)
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest(
-    methodName = "CreateConnectionObject",
-    typeName = typeName,
-    args = args
-  )
-  
+
   echo "Creating connection object for session ID: ", sessionId
-  let responseData = await client.invoke("CreateConnectionObject", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let connectionId = ret.returnValue.value.int32Val
-      echo "Connection object created with ID: ", connectionId
-      return connectionId
-  
+  let ret = await client.call("CreateConnectionObject", typeName, sessionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let connectionId = ret.getInt32
+    echo "Connection object created with ID: ", connectionId
+    return connectionId
+
   echo "Failed to create connection object"
   raise newException(IOError, "Failed to create connection object")
 
@@ -164,40 +121,17 @@ proc isConnected*(client: NrtpTcpClient, sessionId: int32, connectionId: int32):
 
   # Create an "IsConnected" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client/Session ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest(
-    methodName = "IsConnected",
-    typeName = typeName,
-    args = args
-  )
-  
+
   echo "Checking connection status for session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("IsConnected", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let isConnected = ret.returnValue.value.int32Val
-      if isConnected == 1:
-        echo "Connection is active"
-        return true
-      else:
-        echo "Connection is not active"
-        return false
+  let ret = await client.call("IsConnected", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    if ret.getInt32 == 1:
+      echo "Connection is active"
+      return true
+    else:
+      echo "Connection is not active"
+      return false
 
   echo "Failed to check connection status"
   raise newException(IOError, "Failed to check connection status")
@@ -214,38 +148,18 @@ proc disconnect*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): 
 
   # Create a "Disconnect" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client/Session ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest(
-    methodName = "Disconnect",
-    typeName = typeName,
-    args = args
-  )
-  
+
   echo "Disconnecting session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("Disconnect", typeName, false, requestData)
-  
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 0:
-        echo "Successfully disconnected from database"
-      else:
-        echo "Failed to disconnect from database, error code: ", statusCode
-      return statusCode
-  
+  let ret = await client.call("Disconnect", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 0:
+      echo "Successfully disconnected from database"
+    else:
+      echo "Failed to disconnect from database, error code: ", statusCode
+    return statusCode
+
   echo "Failed to disconnect from database, unexpected response"
   raise newException(IOError, "Failed to disconnect from database")
 
@@ -261,38 +175,17 @@ proc destroyConnectionObject*(client: NrtpTcpClient, sessionId: int32, connectio
 
   # Create a "DestroyConnectionObject" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client/Session ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest(
-    methodName = "DestroyConnectionObject",
-    typeName = typeName,
-    args = args
-  )
-  
+
   echo "Destroying connection object - session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("DestroyConnectionObject", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 0:
-        echo "Successfully destroyed connection object"
-      else:
-        echo "Failed to destroy connection object, error code: ", statusCode
-      return statusCode
-  
+  let ret = await client.call("DestroyConnectionObject", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 0:
+      echo "Successfully destroyed connection object"
+    else:
+      echo "Failed to destroy connection object, error code: ", statusCode
+    return statusCode
+
   echo "Failed to destroy connection object, unexpected response"
   raise newException(IOError, "Failed to destroy connection object")
