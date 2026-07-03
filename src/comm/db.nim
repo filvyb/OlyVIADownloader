@@ -1,12 +1,11 @@
-import faststreams/inputs
-import asyncdispatch
-import strutils, sequtils, tables
+import asyncdispatch, options
+import strutils, tables
 
 import ../utils/[zip, boost]
 
 import DotNimRemoting/tcp/[client, common]
-import DotNimRemoting/msnrbf/[helpers, grammar, enums, types, context]
-import DotNimRemoting/msnrbf/records/[methodinv, member, class, arrays]
+import DotNimRemoting/msnrbf/[helpers, grammar, enums]
+import DotNimRemoting/msnrbf/records/methodinv
 
 proc dissolveAlias*(client: NrtpTcpClient, alias: string): Future[tuple[status: int32, dbName: string, dbLocation: string, dbmsType: int32]] {.async.} =
   ## Resolves a database alias to its actual database connection information
@@ -20,25 +19,24 @@ proc dissolveAlias*(client: NrtpTcpClient, alias: string): Future[tuple[status: 
   
   # Create arguments: alias and placeholders for ref parameters
   let args = @[
-    stringValue(alias),    # Input alias parameter
-    PrimitiveValue(kind: ptNull),       # Placeholder for ref database name
-    PrimitiveValue(kind: ptNull),       # Placeholder for ref database location
-    int32Value(0)          # Placeholder for ref DBMS type
+    toRemotingValue(alias),  # Input alias parameter
+    nullValue(),             # Placeholder for ref database name
+    nullValue(),             # Placeholder for ref database location
+    toRemotingValue(0'i32)   # Placeholder for ref DBMS type
   ]
-  
+
   # Create request
   let requestData = createMethodCallRequest(
     methodName = "DissolveAlias",
     typeName = typeName,
     args = args
   )
-  
+
   echo "Resolving alias: ", alias
   let responseData = await client.invoke("DissolveAlias", typeName, false, requestData)
-  
+
   # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
+  let msg = deserializeRemotingMessage(responseData)
   
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
@@ -75,44 +73,28 @@ proc connectToDatabase*(client: NrtpTcpClient, sessionId: int32, connectionId: i
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
   
   # Create arguments according to the ConnectEx method signature
-  var args: seq[PrimitiveValue] = @[
-    int32Value(sessionId),        # Client/Session ID
-    int32Value(connectionId),     # Connection ID
-    if dbName == "": PrimitiveValue(kind: ptNull) else: stringValue(dbName),  # DatabaseName (NULL if empty)
-    stringValue(dbLocation),      # DatabaseLocation
-    int32Value(dbmsType),         # DBMSType
-    stringValue(username),        # User
-    stringValue(password),        # Password
-    if domain == "": PrimitiveValue(kind: ptNull) else: stringValue(domain)   # Domain (NULL if empty)
+  let args = @[
+    toRemotingValue(sessionId),      # Client/Session ID
+    toRemotingValue(connectionId),   # Connection ID
+    if dbName == "": nullValue() else: toRemotingValue(dbName),  # DatabaseName (NULL if empty)
+    toRemotingValue(dbLocation),     # DatabaseLocation
+    toRemotingValue(dbmsType),       # DBMSType
+    toRemotingValue(username),       # User
+    toRemotingValue(password),       # Password
+    if domain == "": nullValue() else: toRemotingValue(domain)   # Domain (NULL if empty)
   ]
-  
-  # Create request
-  let requestData = createMethodCallRequest(
-    methodName = "ConnectEx",
-    typeName = typeName,
-    args = args
-  )
-  
+
   echo "Connecting to database at: ", dbLocation
-  let responseData = await client.invoke("ConnectEx", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 0:
-        echo "Successfully connected to database"
-      else:
-        echo "Failed to connect to database, error code: ", statusCode
-      return statusCode
-  
+  let ret = await client.call("ConnectEx", typeName, args)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 0:
+      echo "Successfully connected to database"
+    else:
+      echo "Failed to connect to database, error code: ", statusCode
+    return statusCode
+
   echo "Failed to connect to database, unexpected response"
   raise newException(IOError, "Failed to connect to database")
 
@@ -123,162 +105,75 @@ proc createQueryResultObjects*(client: NrtpTcpClient, sessionId: int32, count: i
   # Set the path to the server object
   client.setPath("LLRemoteServer")
 
-  # Create serialization context
-  let ctx = newSerializationContext()
-  
-  # Create the array object first (will get ID 3)
-  let emptyArrayRecord = ArrayRecord(
-    kind: rtArraySingleObject,
-    arraySingleObject: ArraySingleObject(
-      recordType: rtArraySingleObject,
-      arrayInfo: ArrayInfo(
-        objectId: 0,  # Will be assigned during serialization
-        length: 32    # Initial capacity
-      )
-    )
-  )
-  
-  # Create null elements for the array
-  var arrayElements: seq[RemotingValue]
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+
+  # Build the Queue's backing array (32-slot initial capacity, all nulls)
+  var slots: seq[RemotingValue]
   for i in 0..<32:
-    arrayElements.add(RemotingValue(kind: rvNull))
-  
-  let arrayValue = RemotingValue(
-    kind: rvArray,
-    arrayVal: ArrayValue(
-      record: emptyArrayRecord,
-      elements: arrayElements
-    )
-  )
-  
-  # Create the Queue class members with reference to array
-  let queueMembers = @[
-    RemotingValue(kind: rvReference, idRef: 3),                           # _array (reference to ID 3)
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _head
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _tail
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0)),        # _size
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(200)),      # _growFactor (200 = 2.0 as percentage)
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(0))         # _version
+    slots.add(nullValue())
+
+  # Empty System.Collections.Queue instance the server fills with object IDs
+  let queue = systemClassValue("System.Collections.Queue", {
+    "_array": objectArrayValue(slots),
+    "_head": toRemotingValue(0'i32),
+    "_tail": toRemotingValue(0'i32),
+    "_size": toRemotingValue(0'i32),
+    "_growFactor": toRemotingValue(200'i32),  # 200 = 2.0 as percentage
+    "_version": toRemotingValue(0'i32)
+  })
+
+  let args = @[
+    toRemotingValue(sessionId),  # Client
+    toRemotingValue(count),      # nCount
+    queue                        # Queue receiving the created IDs
   ]
-  
-  # Create member type info for System.Collections.Queue
-  let memberInfos = @[
-    (name: "_array", btype: btObjectArray, addInfo: AdditionalTypeInfo(kind: btObjectArray)),
-    (name: "_head", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
-    (name: "_tail", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
-    (name: "_size", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
-    (name: "_growFactor", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32)),
-    (name: "_version", btype: btPrimitive, addInfo: AdditionalTypeInfo(kind: btPrimitive, primitiveType: ptInt32))
-  ]
-  
-  # Create the Queue class record
-  let queueClassRecord = systemClassWithMembersAndTypes("System.Collections.Queue", memberInfos)
-  
-  # Create the Queue RemotingValue (will get ID 2)
-  let queueValue = RemotingValue(
-    kind: rvClass,
-    classVal: ClassValue(
-      record: ClassRecord(
-        kind: rtSystemClassWithMembersAndTypes,
-        systemClassWithMembersAndTypes: queueClassRecord
-      ),
-      members: queueMembers
-    )
+
+  let requestData = createMethodCallRequest(
+    methodName = "CreateQueryResultObjects",
+    typeName = typeName,
+    args = args
   )
-  
-  # Create method call with ArgsIsArray flag
-  var flags: MessageFlags = {MessageFlag.ArgsIsArray, MessageFlag.NoContext}
-  
-  let call = BinaryMethodCall(
-    recordType: rtMethodCall,
-    messageEnum: flags,
-    methodName: newStringValueWithCode("CreateQueryResultObjects"),
-    typeName: newStringValueWithCode("dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")
-  )
-  
-  # Create the arguments array with reference to queue
-  let argsArray = @[
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sessionId)),  # Client
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(count)),      # nCount
-    RemotingValue(kind: rvReference, idRef: 2)                             # Reference to Queue (ID 2)
-  ]
-  
-  # Create the message with both the queue and array as referenced records
-  let msg = newRemotingMessage(ctx, 
-    methodCall = some(call), 
-    callArray = argsArray,
-    refs = @[queueValue, arrayValue]  # Queue gets ID 2, Array gets ID 3
-  )
-  
-  # Serialize and send
-  let requestData = serializeRemotingMessage(msg, ctx)
-  
+
   echo "Creating ", count, " query result objects..."
-  let responseData = await client.invoke("CreateQueryResultObjects", 
-                                       "dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", 
-                                       false, requestData)
-  
+  let responseData = await client.invoke("CreateQueryResultObjects", typeName, false, requestData)
+
   # Parse response
-  var input = memoryInput(responseData)
-  let responseMsg = readRemotingMessage(input)
-  
-  if responseMsg.methodReturn.isSome:
-    let ret = responseMsg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode != 0:
-        echo "CreateQueryResultObjects failed with status code: ", statusCode
-        return @[]
-    
-    # The response structure includes:
-    # 1. An args array (ArraySingleObject) 
-    # 2. The Queue object (SystemClassWithMembersAndTypes)
-    # 3. The Queue's internal array (ArraySingleObject) containing the IDs
-    # Find the Queue object in the referenced records
-    var queueObj: RemotingValue
-    var queueFound = false
+  let responseMsg = deserializeRemotingMessage(responseData)
 
-    let merged = responseMsg.methodCallArray & responseMsg.referencedRecords
+  # Status code travels as the inline return value; returnValueOf also
+  # resolves member references in the response graph
+  let retVal = returnValueOf(responseMsg)
+  if retVal.kind == rvPrimitive and retVal.primitiveVal.kind == ptInt32:
+    let statusCode = retVal.getInt32
+    if statusCode != 0:
+      echo "CreateQueryResultObjects failed with status code: ", statusCode
+      return @[]
 
-    for record in merged:
-      if record.kind == rvClass:
-        let classRecord = record.classVal.record
-        if classRecord.kind == rtSystemClassWithMembersAndTypes:
-          if classRecord.systemClassWithMembersAndTypes.classInfo.name.value == "System.Collections.Queue":
-            queueObj = record
-            queueFound = true
-            break
+  # The created IDs come back inside the returned Queue's _array member;
+  # find the Queue among the response records
+  for record in responseMsg.methodCallArray & responseMsg.referencedRecords:
+    if record.kind == rvClass and className(record) == "System.Collections.Queue":
+      let sizeVal = record["_size"]
+      if sizeVal.kind != rvPrimitive or sizeVal.primitiveVal.kind != ptInt32:
+        break
+      let actualCount = sizeVal.getInt32
+      echo "Server created ", actualCount, " query result objects"
 
-    if queueFound:
-      let queueMembers = queueObj.classVal.members
-      if queueMembers.len >= 4:  # Ensure we have all members
-        let sizeVal = queueMembers[3]  # _size member
-        
-        if sizeVal.kind == rvPrimitive and sizeVal.primitiveVal.kind == ptInt32:
-          let actualCount = sizeVal.primitiveVal.int32Val
-          echo "Server created ", actualCount, " query result objects"
-          
-          # Find the array object that contains the actual IDs
-          var resultIds: seq[int32] = @[]
-          
-          for record in responseMsg.referencedRecords:
-            if record.kind == rvArray:
-              let arrayRecord = record.arrayVal.record
-              if arrayRecord.kind == rtArraySingleObject:
-                let elements = record.arrayVal.elements
-                
-                for i in 0..<min(actualCount, elements.len.int32):
-                  let elem = elements[i]
-                  if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptInt32:
-                    resultIds.add(elem.primitiveVal.int32Val)
-                
-                if resultIds.len > 0:
-                  echo "Successfully retrieved ", resultIds.len, " query result object IDs"
-                  return resultIds
-  
+      let buffer = record["_array"]
+      if buffer.kind != rvArray:
+        break
+
+      var resultIds: seq[int32] = @[]
+      for i in 0..<min(actualCount.int, buffer.len):
+        let elem = buffer[i]
+        if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptInt32:
+          resultIds.add(elem.getInt32)
+
+      if resultIds.len > 0:
+        echo "Successfully retrieved ", resultIds.len, " query result object IDs"
+        return resultIds
+      break
+
   return @[]
 
 proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
@@ -302,176 +197,74 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
   # Set the path to the server object
   client.setPath("LLRemoteServer")
 
-  # Create serialization context
-  let ctx = newSerializationContext()
-  
-  # Create the SQL commands array (will get ID 2)
-  let sqlArrayElements = sqlCommandTexts.mapIt(toRemotingValue(it))
-  
-  let sqlArrayValue = RemotingValue(
-    kind: rvArray,
-    arrayVal: ArrayValue(
-      record: ArrayRecord(
-        kind: rtArraySingleString,
-        arraySingleString: ArraySingleString(
-          recordType: rtArraySingleString,
-          arrayInfo: ArrayInfo(
-            objectId: 0,  # Will be assigned during serialization
-            length: sqlCommandTexts.len.int32
-          )
-        )
-      ),
-      elements: sqlArrayElements
-    )
-  )
-  
-  # Create the ParamsIn data if provided
-  var referencedRecords: seq[RemotingValue] = @[sqlArrayValue]
-  var paramsInRef: RemotingValue
-  var paramsInRefId: int32 = 0
-  
-  if paramsIn.len > 0:
-    let byteElements = paramsIn.mapIt(RemotingValue(
-      kind: rvPrimitive, 
-      primitiveVal: byteValue(it)
-    ))
-    
-    let paramsInValue = RemotingValue(
-      kind: rvArray,
-      arrayVal: ArrayValue(
-        record: ArrayRecord(
-          kind: rtArraySinglePrimitive,
-          arraySinglePrimitive: ArraySinglePrimitive(
-            recordType: rtArraySinglePrimitive,
-            arrayInfo: ArrayInfo(
-              objectId: 0,  # Will be assigned during serialization
-              length: paramsIn.len.int32
-            ),
-            primitiveType: ptByte
-          )
-        ),
-        elements: byteElements
-      )
-    )
-    
-    referencedRecords.add(paramsInValue)
-    # The params array will get ID 4 (after SQL array gets 2 and its string gets 3)
-    paramsInRefId = 4
-    paramsInRef = RemotingValue(kind: rvReference, idRef: paramsInRefId)
-  else:
-    paramsInRef = RemotingValue(kind: rvNull)
-  
-  # Create method call with ArgsIsArray flag
-  var flags: MessageFlags = {MessageFlag.ArgsIsArray, MessageFlag.NoContext}
-  
-  let call = BinaryMethodCall(
-    recordType: rtMethodCall,
-    messageEnum: flags,
-    methodName: newStringValueWithCode("Execute"),
-    typeName: newStringValueWithCode("dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")
-  )
-  
-  # Create the arguments array
-  let argsArray = @[
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sessionId)),      # Client
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(connectionId)),   # Connection
-    RemotingValue(kind: rvReference, idRef: 2),                                # SqlCommandTexts reference
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sqlCommandType)), # SqlCommandType
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(sqlCommandSubType)), # SqlCommandSubType
-    RemotingValue(kind: rvPrimitive, primitiveVal: int32Value(queryResultId)),  # QueryResult
-    paramsInRef,                                                                # ParamsIn (ref)
-    RemotingValue(kind: rvNull),                                               # ParamsOut (ref, null in request)
-    RemotingValue(kind: rvNull)                                                # Results (ref, null in request)
+  let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
+
+  # Create the arguments according to the Execute method signature; the SQL
+  # commands travel as a string[] and ParamsIn as a byte[] (null when empty)
+  let args = @[
+    toRemotingValue(sessionId),          # Client
+    toRemotingValue(connectionId),       # Connection
+    toRemotingValue(sqlCommandTexts),    # SqlCommandTexts
+    toRemotingValue(sqlCommandType),     # SqlCommandType
+    toRemotingValue(sqlCommandSubType),  # SqlCommandSubType
+    toRemotingValue(queryResultId),      # QueryResult
+    if paramsIn.len > 0: toRemotingValue(paramsIn) else: nullValue(),  # ParamsIn
+    nullValue(),                         # ParamsOut (ref, null in request)
+    nullValue()                          # Results (ref, null in request)
   ]
-  
-  # Create the message
-  let msg = newRemotingMessage(ctx, 
-    methodCall = some(call), 
-    callArray = argsArray,
-    refs = referencedRecords
+
+  let requestData = createMethodCallRequest(
+    methodName = "Execute",
+    typeName = typeName,
+    args = args
   )
-  
-  # Serialize and send
-  let requestData = serializeRemotingMessage(msg, ctx)
-  
+
   echo "Executing SQL command(s)..."
   if sqlCommandTexts.len > 0:
-    echo "  First command: ", sqlCommandTexts[0][0..min(50, sqlCommandTexts[0].len-1)], 
+    echo "  First command: ", sqlCommandTexts[0][0..min(50, sqlCommandTexts[0].len-1)],
          if sqlCommandTexts[0].len > 50: "..." else: ""
-  
-  let responseData = await client.invoke("Execute", 
-                                       "dbapi.dni.ILLRemoteServer, LLDbRemoting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", 
-                                       false, requestData)
-  
+
+  let responseData = await client.invoke("Execute", typeName, false, requestData)
+
   # Parse response
-  var input = memoryInput(responseData)
-  let responseMsg = readRemotingMessage(input)
+  let responseMsg = deserializeRemotingMessage(responseData)
   
   if responseMsg.methodReturn.isSome:
-    let ret = responseMsg.methodReturn.get
-    
-    # Extract the return status
     var status: int32 = -1
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      status = ret.returnValue.value.int32Val
+    let retVal = returnValueOf(responseMsg)
+    if retVal.kind == rvPrimitive and retVal.primitiveVal.kind == ptInt32:
+      status = retVal.getInt32
       if status != 0:
         echo "Execute failed with status code: ", status
         return (status, @[], initTable[string, seq[string]]())
-    
-    # Structure:
-    # 1. BinaryMethodReturn with status code (0 = success)
-    # 2. ArraySingleObject with 9 items (matching Execute's 9 parameters):
-    #    - Items 0-5: null values (Client, Connection, SqlCommandTexts, SqlCommandType, SqlCommandSubType, QueryResult)
-    #    - Item 6: MemberReference to ParamsIn (echoed back from request)
-    #    - Item 7: MemberReference to ParamsOut (output parameters)
-    #    - Item 8: MemberReference to Results (query results)
-    # 3. Three ArraySinglePrimitive objects containing ZIP files:
-    #    - ParamsIn: echoed back from request
-    #    - ParamsOut: output parameters as ZIP containing "serialized.bin"
-    #    - Results: query results as ZIP containing "Resultset.bin"
-    
-    # Find the array references in the method call array
-    var paramsInRef: int32 = 0
-    var paramsOutRef: int32 = 0
-    var resultsRef: int32 = 0
-    
-    if responseMsg.methodCallArray.len >= 9:
-      # Extract references from positions 6, 7, 8 (0-indexed)
-      if responseMsg.methodCallArray[6].kind == rvReference:
-        paramsInRef = responseMsg.methodCallArray[6].idRef
-      if responseMsg.methodCallArray[7].kind == rvReference:
-        paramsOutRef = responseMsg.methodCallArray[7].idRef
-      if responseMsg.methodCallArray[8].kind == rvReference:
-        resultsRef = responseMsg.methodCallArray[8].idRef
-    else:
+
+    # The output args array mirrors Execute's 9 parameters:
+    #   - Items 0-5: null values (echoed input parameters)
+    #   - Item 6: ParamsIn (echoed back from request)
+    #   - Item 7: ParamsOut as ZIP containing "serialized.bin"
+    #   - Item 8: Results as ZIP containing "Resultset.bin"
+    # References are already resolved, so the byte arrays sit in place
+    if responseMsg.methodCallArray.len < 9:
       echo "Unexpected response format: methodCallArray does not contain enough items"
       raise newException(IOError, "Invalid response format from Execute")
-    
-    # Now find the actual byte arrays in the referenced records
+
     var paramsOutBytes: seq[byte] = @[]
     var resultsBytes: seq[byte] = @[]
-    
-    for record in responseMsg.referencedRecords:
-      if record.kind == rvArray:
-        let arrayRecord = record.arrayVal.record
-        if arrayRecord.kind == rtArraySinglePrimitive:
-          let arrayPrim = arrayRecord.arraySinglePrimitive
-          
-          # Check if this is one of our arrays by matching the expected IDs
-          # Note: The objectId is set during deserialization
-          if arrayPrim.arrayInfo.objectId == paramsOutRef:
-            for elem in record.arrayVal.elements:
-              if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
-                paramsOutBytes.add(elem.primitiveVal.byteVal)
-            echo "Extracted ParamsOut: ", paramsOutBytes.len, " bytes"
-            
-          elif arrayPrim.arrayInfo.objectId == resultsRef:
-            for elem in record.arrayVal.elements:
-              if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
-                resultsBytes.add(elem.primitiveVal.byteVal)
-            echo "Extracted Results: ", resultsBytes.len, " bytes"
-    
+
+    let paramsOutVal = responseMsg.methodCallArray[7]
+    if paramsOutVal.kind == rvArray:
+      for elem in paramsOutVal.elements:
+        if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+          paramsOutBytes.add(elem.getByte)
+      echo "Extracted ParamsOut: ", paramsOutBytes.len, " bytes"
+
+    let resultsVal = responseMsg.methodCallArray[8]
+    if resultsVal.kind == rvArray:
+      for elem in resultsVal.elements:
+        if elem.kind == rvPrimitive and elem.primitiveVal.kind == ptByte:
+          resultsBytes.add(elem.getByte)
+      echo "Extracted Results: ", resultsBytes.len, " bytes"
+
     echo "Execute completed successfully"
     #echo digUpBoostBin(paramsOutBytes)
     #echo digUpBoostBin(resultsBytes)
@@ -499,24 +292,23 @@ proc getMaxBufferedRowCount*(client: NrtpTcpClient, sessionId: int32, queryResul
   
   # Create arguments: sessionId, queryResultId, and placeholder for ref parameter
   let args = @[
-    int32Value(sessionId),      # Client parameter
-    int32Value(queryResultId),  # QueryHandle parameter
-    uint32Value(0)             # Placeholder for ref uMaxBufferedRows parameter
+    toRemotingValue(sessionId),      # Client parameter
+    toRemotingValue(queryResultId),  # QueryHandle parameter
+    toRemotingValue(0'u32)           # Placeholder for ref uMaxBufferedRows parameter
   ]
-  
+
   # Create request
   let requestData = createMethodCallRequest(
     methodName = "GetMaxBufferedRowCount",
     typeName = typeName,
     args = args
   )
-  
+
   echo "Getting max buffered row count for query result ID: ", queryResultId
   let responseData = await client.invoke("GetMaxBufferedRowCount", typeName, false, requestData)
-  
+
   # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
+  let msg = deserializeRemotingMessage(responseData)
   
   if msg.methodReturn.isSome:
     let ret = msg.methodReturn.get
@@ -553,35 +345,18 @@ proc beginTran*(client: NrtpTcpClient, clientId: int32, connectionId: int32): Fu
   ## Returns:
   ##   Transaction ID (typically 1 for success)
   
-  # Create the two Int32 arguments
-  let args = @[
-    int32Value(clientId),
-    int32Value(connectionId)
-  ]
-  
   # The type name from the capture includes the full assembly info
-  # But createMethodCallRequest appends version info, so we need just the base part
+  # But the request builder appends version info, so we need just the base part
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create the request
-  let requestData = createMethodCallRequest("BeginTran", typeName, args)
-  
-  # Send the request and get response
-  let responseData = await client.invoke("BeginTran", typeName, false, requestData)
-  
-  # Parse the response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  # Extract the return value
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    if MessageFlag.ReturnValueInline in ret.messageEnum:
-      if ret.returnValue.primitiveType == ptInt32:
-        return ret.returnValue.value.int32Val
-      else:
-        raise newException(ValueError, "Expected Int32 return value, got: " & $ret.returnValue.primitiveType)
-  
+
+  let ret = await client.call("BeginTran", typeName, clientId, connectionId)
+
+  if ret.kind == rvPrimitive:
+    if ret.primitiveVal.kind == ptInt32:
+      return ret.getInt32
+    else:
+      raise newException(ValueError, "Expected Int32 return value, got: " & $ret.primitiveVal.kind)
+
   raise newException(IOError, "Invalid response from BeginTran")
 
 proc commitTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Future[int32] {.async.} =
@@ -596,36 +371,18 @@ proc commitTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): 
 
   # Create a "CommitTran" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest("CommitTran", typeName, args)
-  
+
   echo "Committing transaction for session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("CommitTran", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 1:
-        echo "Transaction committed successfully"
-      else:
-        echo "Transaction commit returned status: ", statusCode
-      return statusCode
-  
+  let ret = await client.call("CommitTran", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 1:
+      echo "Transaction committed successfully"
+    else:
+      echo "Transaction commit returned status: ", statusCode
+    return statusCode
+
   echo "Failed to commit transaction, unexpected response"
   raise newException(IOError, "Failed to commit transaction")
 
@@ -641,36 +398,18 @@ proc inTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32): Futu
 
   # Create a "InTran" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest("InTran", typeName, args)
-  
+
   echo "Checking if in transaction for session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("InTran", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 1:
-        echo "Transaction is active"
-      else:
-        echo "No active transaction"
-      return statusCode
-  
+  let ret = await client.call("InTran", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 1:
+      echo "Transaction is active"
+    else:
+      echo "No active transaction"
+    return statusCode
+
   echo "Failed to check transaction status, unexpected response"
   raise newException(IOError, "Failed to check transaction status")
 
@@ -686,35 +425,17 @@ proc rollbackTran*(client: NrtpTcpClient, sessionId: int32, connectionId: int32)
 
   # Create a "RollbackTran" method call
   let typeName = "dbapi.dni.ILLRemoteServer, LLDbRemoting"
-  
-  # Create arguments: sessionId and connectionId
-  let args = @[
-    int32Value(sessionId),    # Client ID
-    int32Value(connectionId)  # Connection ID
-  ]
-  
-  # Create request
-  let requestData = createMethodCallRequest("RollbackTran", typeName, args)
-  
+
   echo "Rolling back transaction for session ID: ", sessionId, ", connection ID: ", connectionId
-  let responseData = await client.invoke("RollbackTran", typeName, false, requestData)
-  
-  # Parse response
-  var input = memoryInput(responseData)
-  let msg = readRemotingMessage(input)
-  
-  if msg.methodReturn.isSome:
-    let ret = msg.methodReturn.get
-    
-    # Check if we have a return value
-    if MessageFlag.ReturnValueInline in ret.messageEnum and 
-       ret.returnValue.primitiveType == ptInt32:
-      let statusCode = ret.returnValue.value.int32Val
-      if statusCode == 1:
-        echo "Transaction rolled back successfully"
-      else:
-        echo "Transaction rollback returned status: ", statusCode
-      return statusCode
-  
+  let ret = await client.call("RollbackTran", typeName, sessionId, connectionId)
+
+  if ret.kind == rvPrimitive and ret.primitiveVal.kind == ptInt32:
+    let statusCode = ret.getInt32
+    if statusCode == 1:
+      echo "Transaction rolled back successfully"
+    else:
+      echo "Transaction rollback returned status: ", statusCode
+    return statusCode
+
   echo "Failed to roll back transaction, unexpected response"
   raise newException(IOError, "Failed to roll back transaction")
