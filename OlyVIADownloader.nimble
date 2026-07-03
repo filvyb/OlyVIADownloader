@@ -12,5 +12,5 @@ bin           = @["OlyVIADownloader"]
 
 requires "nim >= 2.0.0"
 requires "argparse >= 4.0.0"
-requires "DotNimRemoting == 0.9.6"
+requires "DotNimRemoting >= 1.0.0"
 requires "zippy >= 0.10.19"

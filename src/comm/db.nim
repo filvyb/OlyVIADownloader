@@ -306,8 +306,7 @@ proc executeSql*(client: NrtpTcpClient, sessionId: int32, connectionId: int32,
   let ctx = newSerializationContext()
   
   # Create the SQL commands array (will get ID 2)
-  let sqlArrayElements = sqlCommandTexts.mapIt(RemotingValue(kind: rvString, 
-                                                             stringVal: LengthPrefixedString(value: it)))
+  let sqlArrayElements = sqlCommandTexts.mapIt(toRemotingValue(it))
   
   let sqlArrayValue = RemotingValue(
     kind: rvArray,

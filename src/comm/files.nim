@@ -107,7 +107,7 @@ proc getFileList*(client: NrtpTcpClient, serverURL: string, databaseGUID: string
               if arrayInfo.objectId == refId:
                 for elem in record.arrayVal.elements:
                   if elem.kind == rvString:
-                    fileNames.add(elem.stringVal.value)
+                    fileNames.add(elem.getString)
                 
                 echo "Successfully retrieved ", fileNames.len, " files"
                 return (status, fileNames)
@@ -119,7 +119,7 @@ proc getFileList*(client: NrtpTcpClient, serverURL: string, databaseGUID: string
         if arrayRecord.kind == rtArraySingleString:
           for elem in record.arrayVal.elements:
             if elem.kind == rvString:
-              fileNames.add(elem.stringVal.value)
+              fileNames.add(elem.getString)
           
           echo "Successfully retrieved ", fileNames.len, " files"
           return (status, fileNames)
